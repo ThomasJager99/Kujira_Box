@@ -2,6 +2,8 @@
 
 > Homelab in a box. — **v0.1.0** (early, actively developed)
 
+[![ShellCheck](https://github.com/ThomasJager99/Kujira_Box/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/ThomasJager99/Kujira_Box/actions/workflows/shellcheck.yml)
+[![Python Lint](https://github.com/ThomasJager99/Kujira_Box/actions/workflows/python-lint.yml/badge.svg)](https://github.com/ThomasJager99/Kujira_Box/actions/workflows/python-lint.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 Welcome 👋
