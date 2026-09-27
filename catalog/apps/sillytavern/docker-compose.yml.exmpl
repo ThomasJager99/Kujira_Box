@@ -1,0 +1,41 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  sillytavern:
+    <<: *service-defaults
+    image: ${TAVERN_IMAGE}
+    user: ${TAVERN_USER}
+
+    networks:
+      - app_network
+
+    ports:
+      - "${SILLY_PORT}:8000"
+
+    volumes:
+      - ${TAVERN_CONFIG}:/home/node/app/config
+      - ${TAVERN_BACKUP}:/home/node/app/backups
+      - ${TAVERN_DATA}:/home/node/app/data
+      - ${TAVERN_PLUGINS}:/home/node/app/plugins
+      - ${TAVERN_EXTENSIONS}:/home/node/app/public/scripts/extensions/third-party
+
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000"]
+
+networks:
+  app_network:
+    external: true

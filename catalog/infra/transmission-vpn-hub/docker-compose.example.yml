@@ -1,0 +1,86 @@
+# ── VPN hub: gluetun + Transmission ─────────────────────────────────────────
+# gluetun establishes the VPN tunnel and acts as the network gateway. Any
+# container with `network_mode: "service:gluetun"` reaches the internet ONLY
+# through this tunnel. gluetun's built-in kill-switch drops all traffic if the
+# VPN goes down — so a riding container can never leak your real IP.
+#
+# Transmission is the flagship service on the hub. To route ANY OTHER service
+# through the VPN, copy the commented template at the bottom.
+#
+# Copy .env.example to .env, fill in your VPN credentials, then: docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    restart: unless-stopped
+    logging: *default-logging
+    cap_add:
+      - NET_ADMIN                       # required to create the VPN interface
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      # --- VPN provider (WireGuard example) -------------------------------
+      # Named provider (mullvad, protonvpn, ivpn, ...); see gluetun wiki.
+      # For your OWN WireGuard server use VPN_SERVICE_PROVIDER: custom and the
+      # WIREGUARD_ENDPOINT_IP / _PORT / _PUBLIC_KEY vars instead.
+      VPN_SERVICE_PROVIDER: ${VPN_PROVIDER}
+      VPN_TYPE: wireguard
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES}
+      # Let your LAN reach the published web UIs (set to your subnet, or the
+      # replies get dropped by the kill-switch and the UI is unreachable):
+      FIREWALL_OUTBOUND_SUBNETS: ${LAN_SUBNET}
+      TZ: ${TZ:-UTC}
+    ports:
+      # Publish here the web UI of EVERY service that rides gluetun — riding
+      # containers cannot publish their own ports (shared network namespace).
+      - "${TRANSMISSION_PORT:-9091}:9091"       # Transmission web UI
+      # - "8080:8080"                            # example: another service's UI
+    mem_limit: 128m
+    mem_reservation: 32m
+    # gluetun ships its own healthcheck — it reports unhealthy when the tunnel drops.
+
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    container_name: transmission
+    restart: unless-stopped
+    logging: *default-logging
+    # ── THIS line is what forces Transmission through the VPN ──
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${CONFIG_PATH:-./config}/transmission:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+    # NOTE: no `ports:` here — Transmission's 9091 is published on gluetun above.
+    mem_limit: ${TRANSMISSION_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+
+  # ── TEMPLATE: route ANY other service through the VPN hub ───────────────────
+  # Uncomment and adapt. Only three things matter — marked (1) (2) (3).
+  #
+  # example_service:
+  #   image: some/image:latest
+  #   container_name: example_service
+  #   restart: unless-stopped
+  #   network_mode: "service:gluetun"     # (1) share gluetun's stack → VPN-only egress
+  #   depends_on:
+  #     gluetun:
+  #       condition: service_healthy       # (2) start only once the tunnel is up
+  #   environment:
+  #     TZ: ${TZ:-UTC}
+  #   # (3) NEVER add `ports:` here. Publish the service's port on gluetun instead:
+  #   #     add e.g.  - "8080:8080"  under the gluetun `ports:` block above.

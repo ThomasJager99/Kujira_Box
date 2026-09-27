@@ -1,0 +1,89 @@
+# Immich — self-hosted photo & video backup (Google Photos alternative)
+# https://github.com/immich-app/immich
+#
+# Four-container stack: server + machine-learning + valkey (redis) + postgres.
+# Copy .env.example to .env, then: docker compose up -d
+#
+# Image tags/digests here follow the official Immich compose — pin IMMICH_VERSION
+# to a specific release in .env for production rather than tracking "release".
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 5
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  immich-server:
+    <<: *service-defaults
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    container_name: immich_server
+    env_file: .env
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ${UPLOAD_LOCATION}:/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "${IMMICH_PORT:-2283}:2283"
+    mem_limit: ${IMMICH_MEM_LIMIT:-2g}
+    mem_reservation: 512m
+    cpus: 2.0
+    # Healthcheck: the Immich server image ships its own HEALTHCHECK — no override.
+
+  immich-machine-learning:
+    <<: *service-defaults
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    container_name: immich_ml
+    volumes:
+      - model_cache:/cache
+    mem_limit: ${IMMICH_ML_MEM_LIMIT:-3g}
+    mem_reservation: 512m
+    cpus: 2.0
+    # Healthcheck: built into the image (model server exposes its own).
+
+  redis:
+    <<: *service-defaults
+    image: ${REDIS_IMAGE}
+    container_name: immich_redis
+    mem_limit: 256m
+    mem_reservation: 64m
+    cpus: 0.5
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG || exit 1"]
+      start_period: 20s
+
+  database:
+    <<: *service-defaults
+    image: ${DB_IMAGE}
+    container_name: immich_db
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 1.0
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} || exit 1"]
+      start_period: 60s
+
+volumes:
+  model_cache:

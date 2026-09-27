@@ -1,0 +1,41 @@
+# Uptime Kuma — self-hosted uptime monitoring & status pages
+# https://github.com/louislam/uptime-kuma  (image: louislam/uptime-kuma)
+#
+# Single container. Copy .env.example to .env, then: docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  uptime-kuma:
+    <<: *service-defaults
+    image: ${KUMA_IMAGE}
+    container_name: uptime-kuma
+    volumes:
+      - uptime_kuma_data:/app/data
+    ports:
+      - "${KUMA_PORT:-3001}:3001"
+    mem_limit: ${KUMA_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: 1.0
+    healthcheck:
+      # Uptime Kuma ships its own healthcheck binary in the image — more
+      # reliable than assuming wget/curl exists.
+      <<: *default-healthcheck
+      test: ["CMD", "extra/healthcheck"]
+      start_period: 60s
+
+volumes:
+  uptime_kuma_data:

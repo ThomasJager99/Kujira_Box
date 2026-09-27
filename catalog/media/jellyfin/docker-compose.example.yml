@@ -1,0 +1,57 @@
+# Jellyfin — free software media server (movies, shows, music, live TV)
+# https://github.com/jellyfin/jellyfin  (image: jellyfin/jellyfin)
+#
+# Single container. Copy .env.example to .env, then: docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 5
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  jellyfin:
+    <<: *service-defaults
+    image: ${JELLYFIN_IMAGE}
+    container_name: jellyfin
+    environment:
+      TZ: ${TZ:-UTC}
+      # Public URL clients use to reach the server — keeps generated links correct.
+      JELLYFIN_PublishedServerUrl: ${JELLYFIN_PUBLISHED_URL}
+    volumes:
+      - jellyfin_config:/config
+      - jellyfin_cache:/cache
+      # Your media library, mounted read-only (Jellyfin only reads it).
+      - ${MEDIA_PATH}:/media:ro
+    ports:
+      - "${JELLYFIN_PORT:-8096}:8096"
+      - "7359:7359/udp"      # LAN client auto-discovery (optional)
+      # - "1900:1900/udp"    # DLNA (optional)
+    mem_limit: ${JELLYFIN_MEM_LIMIT:-2g}
+    mem_reservation: 512m
+    cpus: 4.0
+    healthcheck:
+      # Jellyfin exposes /health on 8096; the image ships curl.
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1:8096/health || exit 1"]
+      start_period: 40s
+    # Run as a non-root user (recommended). With named volumes, make sure that
+    # user owns the config/cache dirs first, or you'll hit permission errors.
+    # user: "1000:1000"
+    #
+    # Hardware transcoding (Intel QSV / VAAPI) — pass the GPU device:
+    # devices:
+    #   - /dev/dri:/dev/dri
+
+volumes:
+  jellyfin_config:
+  jellyfin_cache:

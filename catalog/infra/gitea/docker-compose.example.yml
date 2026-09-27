@@ -1,0 +1,78 @@
+# Gitea — self-hosted Git service (lightweight GitHub/GitLab alternative)
+# https://github.com/go-gitea/gitea  (image: gitea/gitea)
+#
+# Two-container stack: Gitea + PostgreSQL.
+# Copy .env.example to .env, then: docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 5
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  server:
+    <<: *service-defaults
+    image: ${GITEA_IMAGE}
+    container_name: gitea
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      USER_UID: 1000
+      USER_GID: 1000
+      # Database wiring (Gitea reads GITEA__section__KEY env vars).
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: db:5432
+      GITEA__database__NAME: ${GITEA_DB_NAME}
+      GITEA__database__USER: ${GITEA_DB_USER}
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      # Public address, so clone URLs and links are correct.
+      GITEA__server__DOMAIN: ${GITEA_DOMAIN:-localhost}
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:-http://localhost:3000/}
+      GITEA__server__SSH_PORT: ${GITEA_SSH_PORT:-222}
+    volumes:
+      - gitea_data:/data
+    ports:
+      - "${GITEA_HTTP_PORT:-3000}:3000"
+      # git-over-SSH: host 222 -> container 22, to avoid clashing with host sshd.
+      - "${GITEA_SSH_PORT:-222}:22"
+    mem_limit: ${GITEA_MEM_LIMIT:-1g}
+    mem_reservation: 256m
+    cpus: 2.0
+    healthcheck:
+      # Gitea (Alpine image) has busybox wget; hit its /api/healthz endpoint.
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/healthz || exit 1"]
+      start_period: 60s
+
+  db:
+    <<: *service-defaults
+    image: ${POSTGRES_IMAGE}
+    container_name: gitea_db
+    environment:
+      POSTGRES_DB: ${GITEA_DB_NAME}
+      POSTGRES_USER: ${GITEA_DB_USER}
+      POSTGRES_PASSWORD: ${GITEA_DB_PASSWORD}
+    volumes:
+      - gitea_pgdata:/var/lib/postgresql/data
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      start_period: 30s
+
+volumes:
+  gitea_data:
+  gitea_pgdata:

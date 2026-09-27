@@ -1,0 +1,49 @@
+# Navidrome — self-hosted music server (Subsonic-compatible)
+# https://github.com/navidrome/navidrome  (image: deluan/navidrome)
+#
+# Single container. Copy .env.example to .env, then: docker compose up -d
+#
+# Uses bind mounts (per the official setup): the DATA_PATH folder must be owned
+# by the same UID:GID set below, e.g.:  mkdir -p data && sudo chown 1000:1000 data
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  navidrome:
+    <<: *service-defaults
+    image: ${NAVIDROME_IMAGE}
+    container_name: navidrome
+    # Must match the owner of DATA_PATH and be able to read the music library.
+    user: "${NAVIDROME_UID:-1000}:${NAVIDROME_GID:-1000}"
+    environment:
+      ND_SCANSCHEDULE: 1h
+      ND_LOGLEVEL: info
+      ND_SESSIONTIMEOUT: 24h
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${DATA_PATH:-./data}:/data
+      # Your music library, mounted read-only (Navidrome only reads it).
+      - ${MUSIC_PATH}:/music:ro
+    ports:
+      - "${NAVIDROME_PORT:-4533}:4533"
+    mem_limit: ${NAVIDROME_MEM_LIMIT:-256m}
+    mem_reservation: 64m
+    cpus: 1.0
+    healthcheck:
+      # Navidrome's Alpine image ships busybox wget; hit the web root.
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:4533/ || exit 1"]
+      start_period: 30s

@@ -1,0 +1,167 @@
+# WeKan + MongoDB 7
+#
+# Cleaned-up version of the official docker-compose-mongodb-v7.yml from the
+# WeKan repository. Removed compared to the original:
+#   - alternative FerretDB/Postgres backend + migration service
+#   - LDAP / OAuth2 (Azure, Keycloak, Nextcloud, Doorkeeper) / SAML / CAS blocks
+#   - logging/metrics/Matomo/Kadira options and other advanced tuning
+#   - the "share DB across LAN + VPN" example and the nginx config at the end
+#
+# Official repository: https://github.com/wekan/wekan
+
+# ---- SHARED HEALTHCHECK TEMPLATE (anchor) ----
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+
+# ---- SHARED LOG LIMITS (anchor) ----
+# Without this, Docker's default json-file driver keeps container logs
+# forever and they can quietly eat up disk space over time.
+# max-size = size of one log file before it rotates, max-file = how many
+# rotated files are kept. Total disk usage per container ≈ max-size × max-file.
+x-logging-defaults: &logging-defaults
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Memory limits and other environment-dependent values are set via .env —
+# see .env.example next to this file. Copy it to .env and fill in your own
+# values. The values after ":-" below are fallback defaults used if a
+# variable is missing from .env.
+
+services:
+
+  # ==== DATABASE ====
+  # Stores all boards, cards, and users.
+  # Runs as a "replica set" (rs0) — this is not about high availability,
+  # it's a hard requirement of WeKan for realtime UI updates.
+  wekandb:
+    image: mongo:${MONGO_IMAGE_TAG:-7}
+    container_name: wekan-db
+    restart: always
+    mem_limit: ${DB_MEM_LIMIT:-1g}
+    mem_reservation: ${DB_MEM_RESERVATION:-512m}
+    logging: *logging-defaults
+    # IMPORTANT: wiredTigerCacheSizeGB should be tied to DB_MEM_LIMIT.
+    # MongoDB's rule of thumb: cache ≈ 50% of available memory minus ~1 GB.
+    # If you change DB_MEM_LIMIT in .env, recalculate MONGO_CACHE_SIZE_GB too.
+    command: >
+      sh -c '
+        mongod --storageEngine wiredTiger --wiredTigerCacheSizeGB ${MONGO_CACHE_SIZE_GB:-0.25} --timeZoneInfo /usr/share/zoneinfo --setParameter logicalSessionRefreshMillis=900000 --setParameter localLogicalSessionTimeoutMinutes=45 --oplogSize 20480 --replSet rs0 --bind_ip_all --quiet &
+        until mongosh --host 127.0.0.1 --quiet --eval "
+          try {
+            const status = rs.status();
+            quit(status.ok === 1 ? 0 : 1);
+          } catch (e) {
+            if (
+              e.codeName === \"NotYetInitialized\" ||
+              e.message.includes(\"no replset config has been received\") ||
+              e.message.includes(\"not yet initialized\")
+            ) {
+              rs.initiate({
+                _id: \"rs0\",
+                members: [{ _id: 0, host: \"wekandb:27017\" }]
+              });
+              quit(1);
+            }
+            quit(1);
+          }
+        " >/dev/null 2>&1; do
+          sleep 2
+        done
+        wait
+      '
+    networks:
+      - wekan-tier
+    expose:
+      - 27017
+    # Healthcheck ensures WeKan doesn't start before the DB is ready.
+    # retries/start_period here are higher than the anchor defaults — Mongo
+    # takes longer to come up and initialize the replica set, especially on first run.
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "mongosh", "--host", "127.0.0.1", "--port", "27017", "--quiet", "--eval", "try { quit(rs.status().ok === 1 && db.hello().isWritablePrimary ? 0 : 1) } catch (e) { quit(1) }"]
+      retries: 30
+      start_period: 60s
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - wekan-db:/data/db
+      - wekan-db-dump:/dump
+
+  # ==== WEKAN WEB APP ====
+  wekan:
+    # Pin a specific version instead of latest for predictable upgrades, e.g.:
+    #   image: ghcr.io/wekan/wekan:v6.89
+    image: ghcr.io/wekan/wekan:${WEKAN_IMAGE_TAG:-latest}
+    container_name: wekan-app
+    restart: always
+    mem_limit: ${APP_MEM_LIMIT:-1g}
+    mem_reservation: ${APP_MEM_RESERVATION:-512m}
+    logging: *logging-defaults
+    networks:
+      - wekan-tier
+    ports:
+      # left side — port on the host, right side — port inside the container (don't change).
+      - "${WEKAN_PORT:-8080}:8080"
+    environment:
+      # ---- database ----
+      - MONGO_URL=mongodb://wekandb:27017/wekan
+      - MONGO_OPLOG_URL=mongodb://wekandb:27017/local?replicaSet=rs0
+
+      # ---- how WeKan sees itself from the outside ----
+      # MUST be filled in with the real address/domain in .env,
+      # otherwise links and avatars will break.
+      - ROOT_URL=${ROOT_URL:-http://localhost}
+
+      # ---- timezone ----
+      - TZ=${TZ:-UTC}
+
+      # ---- realtime UI updates ----
+      - METEOR_REACTIVITY_ORDER=changeStreams,oplog,polling
+      - DDP_TRANSPORT=sockjs
+
+      # ---- where uploaded files are stored inside the container ----
+      - WRITABLE_PATH=/data
+
+      # ---- mail for notifications and password reset ----
+      # leave MAIL_URL empty in .env if SMTP isn't set up — WeKan will still
+      # start fine without mail, just without email notifications/resets.
+      - MAIL_URL=${MAIL_URL:-}
+      - MAIL_FROM=${MAIL_FROM:-Wekan Notifications <noreply.wekan@example.com>}
+
+      # ---- REST API (needed e.g. for board export) ----
+      - WITH_API=true
+
+      # ---- minor settings, safe to leave as-is ----
+      - RICHER_CARD_COMMENT_EDITOR=false
+      - CARDS_LOADING=all
+      - CARD_OPENED_WEBHOOK_ENABLED=false
+      - BIGEVENTS_PATTERN=NONE
+      - BROWSER_POLICY_ENABLED=true
+    # Healthcheck via node (guaranteed to be present in the wekan image,
+    # unlike curl/wget which may not be installed).
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      start_period: 60s
+    depends_on:
+      wekandb:
+        condition: service_healthy
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - wekan-files:/data:rw
+
+volumes:
+  wekan-files:
+    driver: local
+  wekan-db:
+    driver: local
+  wekan-db-dump:
+    driver: local
+
+networks:
+  wekan-tier:
+    driver: bridge

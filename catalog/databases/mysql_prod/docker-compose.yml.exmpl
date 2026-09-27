@@ -1,0 +1,51 @@
+services:
+  prod_db:
+    image: mysql:8.0.36
+    container_name: prod_mysql
+    restart: unless-stopped # Restarts container automatically unless it was manually stopped.
+                            # Use "always" if you want it to start on every boot,
+                            # even after a manual stop.
+
+    ports:
+      - "your_port:3306"
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    volumes:
+      - your_data:/var/lib/mysql
+
+    networks:
+      - 'your network'
+
+    mem_limit: 1g
+    cpus: 1.0
+
+# Not using this section because Docker Swarm is not in use.
+# The "deploy" configuration is only applied in Swarm mode.
+# In standalone Docker Compose, resource limits must be defined
+# using mem_limit and cpus instead.
+
+  # deploy:
+  #   resources:
+  #     limits:
+  #       cpus: "1.0"
+  #       memory: 1G
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  prod_mysql_data:
+
+#Only IF your network was created manualy.
+networks:
+  your_network:
+    external: true

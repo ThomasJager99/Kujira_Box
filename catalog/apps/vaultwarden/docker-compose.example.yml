@@ -1,0 +1,45 @@
+# Vaultwarden — self-hosted password manager (Bitwarden-compatible server)
+# https://github.com/dani-garcia/vaultwarden  (image: vaultwarden/server)
+#
+# Single container. Copy .env.example to .env, then: docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  vaultwarden:
+    <<: *service-defaults
+    image: ${VW_IMAGE}
+    container_name: vaultwarden
+    environment:
+      DOMAIN: ${DOMAIN}
+      SIGNUPS_ALLOWED: ${SIGNUPS_ALLOWED:-false}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+    volumes:
+      - vaultwarden_data:/data
+    ports:
+      # host:container — container always listens on 80.
+      - "${VW_PORT:-8000}:80"
+    mem_limit: ${VW_MEM_LIMIT:-256m}
+    mem_reservation: 64m
+    cpus: 0.5
+    healthcheck:
+      # Vaultwarden ships its own /healthcheck.sh inside the image.
+      <<: *default-healthcheck
+      test: ["CMD", "/healthcheck.sh"]
+      start_period: 30s
+
+volumes:
+  vaultwarden_data:

@@ -1,0 +1,46 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  labels:
+    monitoring: "true"
+
+services:
+
+  homepage:
+    <<: *service-defaults
+    image: ${HOMEPAGE_IMAGE}
+    container_name: homepage
+
+    ports:
+      - "${HOMEPAGE_PORT}:3000"
+
+    volumes:
+      - homepage_config:/app/config
+
+    networks:
+      - dashboard_network
+
+    mem_limit: ${HOMEPAGE_MEMORY}
+    cpus: ${HOMEPAGE_CPU}
+
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000 || exit 1"]
+
+volumes:
+  homepage_config:
+
+networks:
+  dashboard_network:
+    external: true

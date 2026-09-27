@@ -1,0 +1,162 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  labels:
+    monitoring: "true"
+
+services:
+
+  prometheus:
+    <<: *service-defaults
+    image: ${PROMETHEUS_IMAGE}
+
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+    networks:
+      - monitoring_network
+
+    depends_on:
+      - node_exporter
+      - cadvisor
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+
+    mem_limit: ${PROMETHEUS_MEMORY}
+    cpus: ${PROMETHEUS_CPU}
+
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/ready"]
+
+
+  node_exporter:
+    <<: *service-defaults
+    image: ${NODE_EXPORTER_IMAGE}
+
+    networks:
+      - monitoring_network
+
+    mem_limit: ${NODE_EXPORTER_MEMORY}
+    cpus: ${NODE_EXPORTER_CPU}
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+
+
+  cadvisor:
+    <<: *service-defaults
+    image: ${CADVISOR_IMAGE}
+
+    networks:
+      - monitoring_network
+
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+
+    mem_limit: ${CADVISOR_MEMORY}
+    cpus: ${CADVISOR_CPU}
+
+    ports:
+      - "9999:8080"
+
+
+  loki:
+    <<: *service-defaults
+    image: ${LOKI_IMAGE}
+
+    networks:
+      - monitoring_network
+
+    ports:
+      - "${LOKI_PORT}:3100"
+
+    volumes:
+      - loki_data:/loki
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+
+    command: -config.file=/etc/loki/local-config.yaml
+
+    mem_limit: ${LOKI_MEMORY}
+    cpus: ${LOKI_CPU}
+
+
+  promtail:
+    <<: *service-defaults
+    image: ${PROMTAIL_IMAGE}
+
+    networks:
+      - monitoring_network
+
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+
+    command: -config.file=/etc/promtail/config.yml
+
+    mem_limit: ${PROMTAIL_MEMORY}
+    cpus: ${PROMTAIL_CPU}
+
+
+  grafana:
+    <<: *service-defaults
+    image: ${GRAFANA_IMAGE}
+
+    networks:
+      - monitoring_network
+
+    ports:
+      - "${GRAFANA_PORT}:3000"
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+    mem_limit: ${GRAFANA_MEMORY}
+    cpus: ${GRAFANA_CPU}
+
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+
+networks:
+  monitoring_network:
+    external: true

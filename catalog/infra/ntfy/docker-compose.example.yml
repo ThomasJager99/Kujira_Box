@@ -1,0 +1,51 @@
+# ntfy — self-hosted push notifications (send alerts to your phone from scripts)
+# https://github.com/binwiederhier/ntfy  (image: binwiederhier/ntfy)
+#
+# Single container. Copy .env.example to .env, then: docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  ntfy:
+    <<: *service-defaults
+    image: ${NTFY_IMAGE}
+    container_name: ntfy
+    command: serve
+    environment:
+      TZ: ${TZ:-UTC}
+      # Public URL of this server — used in links and by the apps. Set it to the
+      # address you actually reach it on (Tailscale IP / domain).
+      NTFY_BASE_URL: ${NTFY_BASE_URL}
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_CACHE_DURATION: "12h"
+      NTFY_BEHIND_PROXY: "false"
+    volumes:
+      - ntfy_cache:/var/cache/ntfy      # message cache (sqlite)
+      - ntfy_config:/etc/ntfy           # config / user db (if you enable auth)
+    ports:
+      - "${NTFY_PORT:-8090}:80"         # container serves HTTP on 80
+    mem_limit: ${NTFY_MEM_LIMIT:-128m}
+    mem_reservation: 32m
+    cpus: 0.5
+    healthcheck:
+      # ntfy exposes /v1/health; the image ships busybox wget.
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/v1/health || exit 1"]
+      start_period: 15s
+
+volumes:
+  ntfy_cache:
+  ntfy_config:

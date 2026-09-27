@@ -1,0 +1,123 @@
+# Paperless-ngx — self-hosted document management with OCR
+# https://github.com/paperless-ngx/paperless-ngx
+#
+# Multi-container stack: webserver + PostgreSQL + Redis + Gotenberg + Tika.
+# Copy .env.example to .env, then: docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 5
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+
+services:
+  broker:
+    <<: *service-defaults
+    image: ${REDIS_IMAGE}
+    container_name: paperless_broker
+    volumes:
+      - redisdata:/data
+    mem_limit: 128m
+    mem_reservation: 32m
+    cpus: 0.5
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "redis-cli", "ping"]
+      start_period: 20s
+
+  db:
+    <<: *service-defaults
+    image: ${POSTGRES_IMAGE}
+    container_name: paperless_db
+    environment:
+      POSTGRES_DB: ${PAPERLESS_DBNAME}
+      POSTGRES_USER: ${PAPERLESS_DBUSER}
+      POSTGRES_PASSWORD: ${PAPERLESS_DBPASS}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      start_period: 30s
+
+  gotenberg:
+    <<: *service-defaults
+    image: ${GOTENBERG_IMAGE}
+    container_name: paperless_gotenberg
+    # Converts office documents to PDF. Locked down per Paperless docs.
+    # No healthcheck: the image ships no HTTP client, so it's an auxiliary
+    # service the webserver waits on with service_started, not service_healthy.
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+
+  tika:
+    <<: *service-defaults
+    image: ${TIKA_IMAGE}
+    container_name: paperless_tika
+    # Extracts text/metadata from office documents (auxiliary, see gotenberg).
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+
+  webserver:
+    <<: *service-defaults
+    image: ${PAPERLESS_IMAGE}
+    container_name: paperless_webserver
+    depends_on:
+      db:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+      gotenberg:
+        condition: service_started
+      tika:
+        condition: service_started
+    ports:
+      - "${PAPERLESS_PORT:-8000}:8000"
+    volumes:
+      - data:/usr/src/paperless/data
+      - media:/usr/src/paperless/media
+      - export:/usr/src/paperless/export
+      - consume:/usr/src/paperless/consume
+    env_file: .env
+    environment:
+      # Service-to-service wiring (fixed names, not environment-specific).
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_TIKA_ENABLED: 1
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+    mem_limit: ${PAPERLESS_MEM_LIMIT:-1g}
+    mem_reservation: 512m
+    cpus: 2.0
+    healthcheck:
+      # Paperless ships curl; this is the healthcheck from the official docs
+      # (127.0.0.1 to avoid the IPv6-localhost trap).
+      <<: *default-healthcheck
+      test: ["CMD", "curl", "-fs", "-S", "--max-time", "2", "http://127.0.0.1:8000"]
+      start_period: 120s
+
+volumes:
+  redisdata:
+  pgdata:
+  data:
+  media:
+  export:
+  consume:
