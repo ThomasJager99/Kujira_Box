@@ -100,6 +100,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Mealie](apps/mealie/) — recipe manager & meal planner (imports recipes from a URL)
 - [IT-Tools](apps/it-tools/) — ~100 handy developer/IT utilities in the browser
 - [ntfy](infra/ntfy/) — push notifications to your phone from scripts & servers
+- [Syncthing](apps/syncthing/) — continuous peer-to-peer file synchronization
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
