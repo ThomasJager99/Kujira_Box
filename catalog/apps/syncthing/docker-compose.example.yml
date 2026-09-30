@@ -1,0 +1,54 @@
+# Syncthing — continuous, peer-to-peer file synchronization
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  syncthing:
+    <<: *service-defaults
+    image: ${SYNCTHING_IMAGE:-syncthing/syncthing}:${SYNCTHING_VERSION:-latest}
+    container_name: syncthing
+    hostname: ${SYNCTHING_HOSTNAME:-homelab}
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Etc/UTC}
+      # The web UI binds to localhost inside the container by default; this
+      # exposes it on all interfaces so the published port is reachable.
+      STGUIADDRESS: 0.0.0.0:8384
+    ports:
+      - "${SYNCTHING_GUI_PORT:-8384}:8384"        # web UI / API
+      - "${SYNCTHING_SYNC_PORT:-22000}:22000/tcp" # data transfer (TCP)
+      - "${SYNCTHING_SYNC_PORT:-22000}:22000/udp" # data transfer (QUIC)
+      - "${SYNCTHING_DISCOVERY_PORT:-21027}:21027/udp" # local discovery
+    volumes:
+      # Holds Syncthing's own config/keys AND the default synced folders.
+      - syncthing_data:/var/syncthing
+      # Add your real data folders as extra bind mounts, e.g.:
+      # - ${DOCS_PATH}:/var/syncthing/Documents
+    healthcheck:
+      <<: *healthcheck-defaults
+      # Alpine image ships busybox wget; this endpoint needs no auth.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8384/rest/noauth/health"]
+    mem_limit: ${SYNCTHING_MEM_LIMIT:-512m}
+    mem_reservation: ${SYNCTHING_MEM_RESERVATION:-128m}
+    cpus: ${SYNCTHING_CPUS:-1.0}
+
+volumes:
+  syncthing_data:
