@@ -115,6 +115,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Homepage](infra/homepage/) — dashboard / start page for all services
 - [Nginx](infra/nginx/) — reverse proxy / web server
 - [Transmission VPN hub](infra/transmission-vpn-hub/) — VPN gateway (gluetun) + Transmission; route any service through the VPN
+- [Nginx Proxy Manager](infra/nginx-proxy-manager/) — reverse proxy UI with automatic Let's Encrypt HTTPS
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
