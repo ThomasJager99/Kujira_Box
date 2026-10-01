@@ -1,0 +1,58 @@
+# n8n — workflow automation
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  n8n:
+    <<: *service-defaults
+    image: ${N8N_IMAGE:-docker.n8n.io/n8nio/n8n}:${N8N_VERSION:-latest}
+    container_name: n8n
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      # --- Public address (must match how you actually reach n8n) ---
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      # --- Timezone (used by Cron/Schedule nodes) ---
+      GENERIC_TIMEZONE: ${TZ:-Etc/UTC}
+      TZ: ${TZ:-Etc/UTC}
+      # --- Security ---
+      # Encrypts stored credentials. SET THIS ONCE and never change it,
+      # or existing credentials become unreadable. Generate with: openssl rand -hex 32
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      # Set to false only on a trusted LAN over plain HTTP, otherwise the
+      # login page refuses to load. Prefer HTTPS via a reverse proxy.
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-true}
+      # Run tasks in the dedicated runner (recommended on current versions).
+      N8N_RUNNERS_ENABLED: "true"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      <<: *healthcheck-defaults
+      # n8n's Alpine image ships busybox wget; /healthz returns 200 when ready.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5678/healthz"]
+    mem_limit: ${N8N_MEM_LIMIT:-1g}
+    mem_reservation: ${N8N_MEM_RESERVATION:-256m}
+    cpus: ${N8N_CPUS:-1.0}
+
+volumes:
+  n8n_data:
