@@ -1,0 +1,50 @@
+# AdGuard Home — network-wide DNS ad & tracker blocker
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 20s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  adguardhome:
+    <<: *service-defaults
+    image: ${ADGUARD_IMAGE:-adguard/adguardhome}:${ADGUARD_VERSION:-latest}
+    container_name: adguardhome
+    ports:
+      - "${ADGUARD_DNS_PORT:-53}:53/tcp"   # DNS over TCP
+      - "${ADGUARD_DNS_PORT:-53}:53/udp"   # DNS over UDP
+      - "${ADGUARD_WEB_PORT:-3000}:3000/tcp" # setup wizard + admin UI
+      # --- Optional, uncomment what you use ---
+      # - "853:853/tcp"     # DNS-over-TLS (DoT)
+      # - "443:443/tcp"     # DNS-over-HTTPS (DoH)
+      # - "67:67/udp"       # DHCP server (if AdGuard runs your DHCP)
+      # - "68:68/udp"
+    volumes:
+      - adguard_work:/opt/adguardhome/work   # runtime data, query log, stats
+      - adguard_conf:/opt/adguardhome/conf   # AdGuardHome.yaml config
+    healthcheck:
+      <<: *healthcheck-defaults
+      # Alpine-based image ships busybox wget; the web port answers in both
+      # the setup-wizard and post-setup states.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
+    mem_limit: ${ADGUARD_MEM_LIMIT:-512m}
+    mem_reservation: ${ADGUARD_MEM_RESERVATION:-128m}
+    cpus: ${ADGUARD_CPUS:-1.0}
+
+volumes:
+  adguard_work:
+  adguard_conf:
