@@ -124,6 +124,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Glances](observability/glances/) — live system resource monitor
 - [Monitoring](observability/monitoring/) — Prometheus + Grafana + Loki metrics & logs stack
 - [Uptime Kuma](observability/uptime_kuma/) — uptime monitoring & status pages
+- [Dozzle](observability/dozzle/) — real-time Docker log viewer in the browser
 
 ### [Databases](databases/)
 - [MySQL](databases/mysql/) — MySQL/MariaDB instance for development & learning
