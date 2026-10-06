@@ -1,0 +1,116 @@
+# Nextcloud — self-hosted files / calendar / contacts suite
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 90s   # first-run install + DB migration can take a while
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  nextcloud:
+    <<: *service-defaults
+    image: ${NEXTCLOUD_IMAGE:-nextcloud}:${NEXTCLOUD_VERSION:-stable}
+    container_name: nextcloud
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${NEXTCLOUD_PORT:-8080}:80"
+    environment:
+      # --- Database (PostgreSQL) ---
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-nextcloud}
+      POSTGRES_USER: ${POSTGRES_USER:-nextcloud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # --- Cache / file locking (Redis) ---
+      REDIS_HOST: redis
+      REDIS_HOST_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      # --- First-run admin account ---
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:?set NEXTCLOUD_ADMIN_PASSWORD in .env}
+      # --- Which hostnames/IPs are allowed to serve this instance ---
+      NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_TRUSTED_DOMAINS:-localhost}
+      # --- PHP tuning ---
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+      PHP_UPLOAD_LIMIT: ${PHP_UPLOAD_LIMIT:-2G}
+      # --- Behind a reverse proxy? uncomment and set these in .env ---
+      # OVERWRITEPROTOCOL: ${OVERWRITEPROTOCOL:-https}
+      # OVERWRITECLIURL: ${OVERWRITECLIURL:-https://cloud.example.com}
+      # TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+    volumes:
+      - nextcloud_app:/var/www/html   # app code, config and (by default) user data
+    healthcheck:
+      <<: *healthcheck-defaults
+      # Image ships PHP (not guaranteed curl); status.php is reachable without a
+      # trusted-domain check and reports whether the instance is installed.
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/status.php')!==false?0:1);"]
+    mem_limit: ${NEXTCLOUD_MEM_LIMIT:-1g}
+    mem_reservation: ${NEXTCLOUD_MEM_RESERVATION:-256m}
+    cpus: ${NEXTCLOUD_CPUS:-2.0}
+
+  # Runs Nextcloud's background jobs every 5 min (recommended over AJAX cron).
+  cron:
+    <<: *service-defaults
+    image: ${NEXTCLOUD_IMAGE:-nextcloud}:${NEXTCLOUD_VERSION:-stable}
+    container_name: nextcloud_cron
+    entrypoint: /cron.sh
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - nextcloud_app:/var/www/html
+    mem_limit: ${NEXTCLOUD_CRON_MEM_LIMIT:-512m}
+    mem_reservation: ${NEXTCLOUD_CRON_MEM_RESERVATION:-64m}
+    cpus: ${NEXTCLOUD_CRON_CPUS:-1.0}
+
+  db:
+    <<: *service-defaults
+    image: ${POSTGRES_IMAGE:-postgres}:${POSTGRES_VERSION:-16-alpine}
+    container_name: nextcloud_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nextcloud}
+      POSTGRES_USER: ${POSTGRES_USER:-nextcloud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nextcloud} -d ${POSTGRES_DB:-nextcloud}"]
+      start_period: 20s
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    mem_reservation: ${POSTGRES_MEM_RESERVATION:-128m}
+    cpus: ${POSTGRES_CPUS:-1.0}
+
+  redis:
+    <<: *service-defaults
+    image: ${REDIS_IMAGE:-redis}:${REDIS_VERSION:-7-alpine}
+    container_name: nextcloud_redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      start_period: 15s
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    mem_reservation: ${REDIS_MEM_RESERVATION:-32m}
+    cpus: ${REDIS_CPUS:-0.5}
+
+volumes:
+  nextcloud_app:
+  db_data:
