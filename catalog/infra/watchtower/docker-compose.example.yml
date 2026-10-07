@@ -1,0 +1,49 @@
+# Watchtower — automatically update running containers
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  watchtower:
+    <<: *service-defaults
+    image: ${WATCHTOWER_IMAGE:-containrrr/watchtower}:${WATCHTOWER_VERSION:-latest}
+    container_name: watchtower
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      # When to check for updates (6-field cron). Default: every day at 04:00.
+      WATCHTOWER_SCHEDULE: ${WATCHTOWER_SCHEDULE:-0 0 4 * * *}
+      # Remove the old image after a successful update.
+      WATCHTOWER_CLEANUP: ${WATCHTOWER_CLEANUP:-true}
+      # Restart containers one-by-one to reduce downtime.
+      WATCHTOWER_ROLLING_RESTART: ${WATCHTOWER_ROLLING_RESTART:-true}
+      # Only update containers that opt in with a label (recommended — see below).
+      # Set false to watch EVERY container on the host.
+      WATCHTOWER_LABEL_ENABLE: ${WATCHTOWER_LABEL_ENABLE:-true}
+      # Notify-only mode: report updates but don't apply them. Leave false to
+      # actually update; set true if you'd rather update by hand.
+      WATCHTOWER_MONITOR_ONLY: ${WATCHTOWER_MONITOR_ONLY:-false}
+      # Optional notifications (shoutrrr URL), e.g. to your ntfy server:
+      # WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-}
+    volumes:
+      # RW socket: Watchtower must pull images and recreate containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      # Watchtower ships its own health-check subcommand.
+      test: ["CMD", "/watchtower", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    mem_limit: ${WATCHTOWER_MEM_LIMIT:-256m}
+    mem_reservation: ${WATCHTOWER_MEM_RESERVATION:-32m}
+    cpus: ${WATCHTOWER_CPUS:-0.5}
