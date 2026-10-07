@@ -120,6 +120,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Nginx Proxy Manager](infra/nginx-proxy-manager/) — reverse proxy UI with automatic Let's Encrypt HTTPS
 - [n8n](infra/n8n/) — workflow automation (visual, self-hosted)
 - [AdGuard Home](infra/adguardhome/) — network-wide DNS ad & tracker blocker
+- [Watchtower](infra/watchtower/) — automatically update running containers
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
