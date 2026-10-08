@@ -1,0 +1,46 @@
+# FreshRSS — self-hosted RSS / Atom feed aggregator
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 20s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  freshrss:
+    <<: *service-defaults
+    image: ${FRESHRSS_IMAGE:-freshrss/freshrss}:${FRESHRSS_VERSION:-latest}
+    container_name: freshrss
+    ports:
+      - "${FRESHRSS_PORT:-8083}:80"
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      # Built-in cron that refreshes feeds; standard cron minute/schedule spec.
+      CRON_MIN: ${FRESHRSS_CRON_MIN:-*/20 * * * *}
+    volumes:
+      - freshrss_data:/var/www/FreshRSS/data           # database (SQLite by default) + config
+      - freshrss_extensions:/var/www/FreshRSS/extensions
+    healthcheck:
+      <<: *healthcheck-defaults
+      # Alpine-based image ships busybox wget; the root path serves the login page.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+    mem_limit: ${FRESHRSS_MEM_LIMIT:-512m}
+    mem_reservation: ${FRESHRSS_MEM_RESERVATION:-64m}
+    cpus: ${FRESHRSS_CPUS:-1.0}
+
+volumes:
+  freshrss_data:
+  freshrss_extensions:
