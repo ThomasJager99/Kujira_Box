@@ -102,6 +102,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [ntfy](infra/ntfy/) — push notifications to your phone from scripts & servers
 - [Syncthing](apps/syncthing/) — continuous peer-to-peer file synchronization
 - [Nextcloud](apps/nextcloud/) — files, calendar & contacts suite (self-hosted cloud)
+- [FreshRSS](apps/freshrss/) — self-hosted RSS / Atom feed aggregator
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
