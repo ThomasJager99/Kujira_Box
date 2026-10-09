@@ -1,0 +1,52 @@
+# Scrutiny — S.M.A.R.T. disk health monitoring dashboard
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# "omnibus" = all-in-one image: web UI + metrics collector + InfluxDB in one
+# container. Simplest for a single host. (Large fleets can split web/collector.)
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  scrutiny:
+    image: ${SCRUTINY_IMAGE:-ghcr.io/analogj/scrutiny}:${SCRUTINY_VERSION:-master-omnibus}
+    container_name: scrutiny
+    restart: unless-stopped
+    logging: *default-logging
+    # Reading S.M.A.R.T. data needs raw device access + capabilities.
+    cap_add:
+      - SYS_RAWIO
+      - SYS_ADMIN            # required for many NVMe drives; harmless for SATA
+    security_opt:
+      - no-new-privileges:true   # if SMART reads fail on NVMe, try removing this
+    ports:
+      - "${SCRUTINY_PORT:-8080}:8080"
+    environment:
+      # When the collector scans your disks (standard cron). Default: daily 01:00.
+      COLLECTOR_CRON_SCHEDULE: ${SCRUTINY_CRON:-0 1 * * *}
+    volumes:
+      - /run/udev:/run/udev:ro     # lets Scrutiny read device metadata
+      - scrutiny_config:/opt/scrutiny/config
+      - scrutiny_influxdb:/opt/scrutiny/influxdb
+    devices:
+      # List every physical disk you want monitored. Adjust to your machine
+      # (check with `lsblk`). Remove ones that don't exist or the container errors.
+      - "/dev/sda:/dev/sda"
+      - "/dev/sdb:/dev/sdb"
+      # - "/dev/nvme0:/dev/nvme0"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    mem_limit: ${SCRUTINY_MEM_LIMIT:-1g}
+    mem_reservation: ${SCRUTINY_MEM_RESERVATION:-256m}
+    cpus: ${SCRUTINY_CPUS:-1.0}
+
+volumes:
+  scrutiny_config:
+  scrutiny_influxdb:
