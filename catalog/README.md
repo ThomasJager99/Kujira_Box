@@ -128,6 +128,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Monitoring](observability/monitoring/) — Prometheus + Grafana + Loki metrics & logs stack
 - [Uptime Kuma](observability/uptime_kuma/) — uptime monitoring & status pages
 - [Dozzle](observability/dozzle/) — real-time Docker log viewer in the browser
+- [Scrutiny](observability/scrutiny/) — S.M.A.R.T. disk health monitoring dashboard
 
 ### [Databases](databases/)
 - [MySQL](databases/mysql/) — MySQL/MariaDB instance for development & learning
