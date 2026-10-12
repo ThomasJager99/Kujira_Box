@@ -1,0 +1,95 @@
+# Vikunja — self-hosted to-do & task management (lists, kanban, calendar)
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# This stack uses the UPGRADED house-style template:
+#   - pinned image versions (see .env)
+#   - split frontend/backend networks (DB isolated, no internet)
+#   - optional hardening block (commented) on the app
+#   - secrets kept in .env (see README for the production note)
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 20s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  vikunja:
+    <<: *service-defaults
+    image: ${VIKUNJA_IMAGE:-vikunja/vikunja}:${VIKUNJA_VERSION:-0.24}
+    container_name: vikunja
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${VIKUNJA_PORT:-3456}:3456"
+    environment:
+      # Public URL clients reach Vikunja by (needed for correct links/CORS).
+      VIKUNJA_SERVICE_PUBLICURL: ${VIKUNJA_PUBLICURL:-http://localhost:3456}
+      # Secret used to sign login sessions. Generate: openssl rand -hex 32
+      VIKUNJA_SERVICE_JWTSECRET: ${VIKUNJA_JWTSECRET:?set VIKUNJA_JWTSECRET in .env}
+      # Database connection (points at the 'db' service over the backend network).
+      VIKUNJA_DATABASE_TYPE: postgres
+      VIKUNJA_DATABASE_HOST: db
+      VIKUNJA_DATABASE_DATABASE: ${POSTGRES_DB:-vikunja}
+      VIKUNJA_DATABASE_USER: ${POSTGRES_USER:-vikunja}
+      VIKUNJA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - vikunja_files:/app/vikunja/files   # uploaded attachments
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      <<: *healthcheck-defaults
+      # Alpine-based image ships busybox wget; /api/v1/info returns JSON when up.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3456/api/v1/info"]
+    mem_limit: ${VIKUNJA_MEM_LIMIT:-512m}
+    mem_reservation: ${VIKUNJA_MEM_RESERVATION:-64m}
+    cpus: ${VIKUNJA_CPUS:-1.0}
+    # --- Optional hardening (defense-in-depth). Uncomment and test per service;
+    #     some apps break under read_only — verify before relying on it. ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+  db:
+    <<: *service-defaults
+    image: ${POSTGRES_IMAGE:-postgres}:${POSTGRES_VERSION:-16-alpine}
+    container_name: vikunja_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vikunja}
+      POSTGRES_USER: ${POSTGRES_USER:-vikunja}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - backend          # backend only: the DB is unreachable from outside the stack
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vikunja} -d ${POSTGRES_DB:-vikunja}"]
+    mem_limit: ${POSTGRES_MEM_LIMIT:-256m}
+    mem_reservation: ${POSTGRES_MEM_RESERVATION:-64m}
+    cpus: ${POSTGRES_CPUS:-1.0}
+
+networks:
+  frontend:          # faces the host/published ports (and the internet)
+  backend:
+    internal: true   # no route to the internet; only stack-internal traffic
+
+volumes:
+  vikunja_files:
+  db_data:
