@@ -103,6 +103,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Syncthing](apps/syncthing/) — continuous peer-to-peer file synchronization
 - [Nextcloud](apps/nextcloud/) — files, calendar & contacts suite (self-hosted cloud)
 - [FreshRSS](apps/freshrss/) — self-hosted RSS / Atom feed aggregator
+- [Vikunja](apps/vikunja/) — self-hosted to-do & task management (lists, kanban, calendar)
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
