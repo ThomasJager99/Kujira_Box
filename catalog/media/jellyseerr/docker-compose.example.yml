@@ -1,0 +1,49 @@
+# Jellyseerr — media request & discovery manager for Jellyfin/Emby/Plex
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# Single container (no database), so the frontend/backend network split from the
+# upgraded template doesn't apply here — pinning + the optional hardening block do.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  jellyseerr:
+    <<: *service-defaults
+    image: ${JELLYSEERR_IMAGE:-fallenbagel/jellyseerr}:${JELLYSEERR_VERSION:-latest}
+    container_name: jellyseerr
+    ports:
+      - "${JELLYSEERR_PORT:-5055}:5055"
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      LOG_LEVEL: ${JELLYSEERR_LOG_LEVEL:-info}
+    volumes:
+      - jellyseerr_config:/app/config   # SQLite db + settings
+    healthcheck:
+      # Node/Alpine image ships busybox wget; /api/v1/status returns JSON when up.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5055/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    mem_limit: ${JELLYSEERR_MEM_LIMIT:-512m}
+    mem_reservation: ${JELLYSEERR_MEM_RESERVATION:-128m}
+    cpus: ${JELLYSEERR_CPUS:-1.0}
+    # --- Optional hardening (test before relying on it) ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+volumes:
+  jellyseerr_config:
