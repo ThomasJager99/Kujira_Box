@@ -112,6 +112,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Kavita](media/kavita/) — reader/server for ebooks, comics & manga
 - [Komga](media/komga/) — comics, manga & digital book library server
 - [Navidrome](media/navidrome/) — music server (Subsonic-compatible) with offline apps
+- [Jellyseerr](media/jellyseerr/) — media request & discovery front end for Jellyfin
 
 ### [Infra](infra/)
 - [Dockge](infra/dockge/) — web manager for Docker Compose stacks
