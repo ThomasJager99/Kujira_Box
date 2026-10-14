@@ -1,0 +1,142 @@
+# authentik — self-hosted SSO / identity provider (OAuth2, SAML, LDAP, proxy auth)
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# Upgraded house-style template: pinned versions, frontend/backend network split
+# (DB + cache isolated), optional hardening block, secrets in .env.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 60s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+# Shared env for the server and worker (they run the same image, same config).
+x-authentik-env: &authentik-env
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?set AUTHENTIK_SECRET_KEY in .env}
+  AUTHENTIK_REDIS__HOST: redis
+  AUTHENTIK_POSTGRESQL__HOST: postgresql
+  AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+  AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS:?set PG_PASS in .env}
+
+services:
+  server:
+    <<: *service-defaults
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_VERSION:-2026.8.3}
+    container_name: authentik_server
+    command: server
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *authentik-env
+    ports:
+      - "${AUTHENTIK_HTTP_PORT:-9000}:9000"
+      - "${AUTHENTIK_HTTPS_PORT:-9443}:9443"
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "ak", "healthcheck"]
+    mem_limit: ${AUTHENTIK_SERVER_MEM_LIMIT:-1g}
+    mem_reservation: ${AUTHENTIK_SERVER_MEM_RESERVATION:-256m}
+    cpus: ${AUTHENTIK_SERVER_CPUS:-2.0}
+    # --- Optional hardening (test first) ---
+    # cap_drop: [ALL]
+    # read_only: true
+    # tmpfs: [/tmp]
+
+  worker:
+    <<: *service-defaults
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_VERSION:-2026.8.3}
+    container_name: authentik_worker
+    command: worker
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *authentik-env
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # Optional: lets the worker manage embedded/other outposts via Docker.
+      # This is docker-socket access (host-root power) — enable only if you use
+      # outpost auto-management, ideally through a socket-proxy.
+      # - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - frontend          # worker needs egress (email, external sources)
+      - backend
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "ak", "healthcheck"]
+    mem_limit: ${AUTHENTIK_WORKER_MEM_LIMIT:-1g}
+    mem_reservation: ${AUTHENTIK_WORKER_MEM_RESERVATION:-256m}
+    cpus: ${AUTHENTIK_WORKER_CPUS:-2.0}
+
+  postgresql:
+    <<: *service-defaults
+    image: ${POSTGRES_IMAGE:-postgres}:${POSTGRES_VERSION:-16-alpine}
+    container_name: authentik_db
+    environment:
+      POSTGRES_DB: ${PG_DB:-authentik}
+      POSTGRES_USER: ${PG_USER:-authentik}
+      POSTGRES_PASSWORD: ${PG_PASS:?set PG_PASS in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - backend          # isolated: no internet, not reachable outside the stack
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-authentik} -d ${PG_DB:-authentik}"]
+      start_period: 20s
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    mem_reservation: ${POSTGRES_MEM_RESERVATION:-128m}
+    cpus: ${POSTGRES_CPUS:-1.0}
+
+  redis:
+    <<: *service-defaults
+    image: ${REDIS_IMAGE:-redis}:${REDIS_VERSION:-7-alpine}
+    container_name: authentik_redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "redis-cli", "ping"]
+      start_period: 15s
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    mem_reservation: ${REDIS_MEM_RESERVATION:-32m}
+    cpus: ${REDIS_CPUS:-0.5}
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  authentik_media:
+  authentik_templates:
+  db_data:
+  redis_data:
