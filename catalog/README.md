@@ -124,6 +124,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [n8n](infra/n8n/) — workflow automation (visual, self-hosted)
 - [AdGuard Home](infra/adguardhome/) — network-wide DNS ad & tracker blocker
 - [Watchtower](infra/watchtower/) — automatically update running containers
+- [authentik](infra/authentik/) — self-hosted SSO / identity provider (OAuth2, SAML, LDAP, proxy auth)
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
