@@ -1,0 +1,52 @@
+# Memos — lightweight, self-hosted notes / microblog (Markdown)
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# Single container with embedded SQLite, so the frontend/backend network split
+# from the upgraded template isn't needed here — pinning + optional hardening are.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  memos:
+    <<: *service-defaults
+    image: ${MEMOS_IMAGE:-neosmemo/memos}:${MEMOS_VERSION:-0.31.0}
+    container_name: memos
+    ports:
+      - "${MEMOS_PORT:-5230}:5230"
+    environment:
+      MEMOS_MODE: ${MEMOS_MODE:-prod}
+      MEMOS_PORT: 5230
+      TZ: ${TZ:-Etc/UTC}
+      # Default driver is SQLite (data in the volume). To use Postgres/MySQL,
+      # set MEMOS_DRIVER + MEMOS_DSN and add a db service (multi-container).
+    volumes:
+      - memos_data:/var/opt/memos   # SQLite db + uploaded resources
+    healthcheck:
+      # Alpine-based image ships busybox wget; /healthz returns 200 when up.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5230/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    mem_limit: ${MEMOS_MEM_LIMIT:-256m}
+    mem_reservation: ${MEMOS_MEM_RESERVATION:-32m}
+    cpus: ${MEMOS_CPUS:-0.5}
+    # --- Optional hardening (test first) ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+volumes:
+  memos_data:
