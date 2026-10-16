@@ -104,6 +104,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Nextcloud](apps/nextcloud/) — files, calendar & contacts suite (self-hosted cloud)
 - [FreshRSS](apps/freshrss/) — self-hosted RSS / Atom feed aggregator
 - [Vikunja](apps/vikunja/) — self-hosted to-do & task management (lists, kanban, calendar)
+- [Memos](apps/memos/) — lightweight self-hosted notes / microblog (Markdown)
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
