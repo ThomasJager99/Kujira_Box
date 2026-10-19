@@ -1,0 +1,50 @@
+# Prowlarr — indexer manager/proxy for the *arr stack (Sonarr, Radarr, ...)
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# Single container, so the frontend/backend network split isn't needed here —
+# pinning + optional hardening apply.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  prowlarr:
+    <<: *service-defaults
+    image: ${PROWLARR_IMAGE:-lscr.io/linuxserver/prowlarr}:${PROWLARR_VERSION:-latest}
+    container_name: prowlarr
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Etc/UTC}
+    ports:
+      - "${PROWLARR_PORT:-9696}:9696"
+    volumes:
+      - prowlarr_config:/config   # app db, indexer definitions, settings
+    healthcheck:
+      # LinuxServer (Alpine) image ships busybox wget; /ping returns 200 when up.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9696/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    mem_limit: ${PROWLARR_MEM_LIMIT:-512m}
+    mem_reservation: ${PROWLARR_MEM_RESERVATION:-64m}
+    cpus: ${PROWLARR_CPUS:-1.0}
+    # --- Optional hardening (test first; LSIO images can need a writable rootfs) ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+volumes:
+  prowlarr_config:
