@@ -114,6 +114,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Komga](media/komga/) — comics, manga & digital book library server
 - [Navidrome](media/navidrome/) — music server (Subsonic-compatible) with offline apps
 - [Jellyseerr](media/jellyseerr/) — media request & discovery front end for Jellyfin
+- [Prowlarr](media/prowlarr/) — indexer manager/proxy for the *arr stack
 
 ### [Infra](infra/)
 - [Dockge](infra/dockge/) — web manager for Docker Compose stacks
