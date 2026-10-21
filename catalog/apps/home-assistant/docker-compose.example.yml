@@ -1,0 +1,51 @@
+# Home Assistant — local-first home automation hub
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# SPECIAL CASE: Home Assistant is run with `network_mode: host` so it can
+# auto-discover devices on your LAN (mDNS/zeroconf, DHCP, UPnP, Bluetooth, etc.).
+# With host networking Docker ignores `ports:` and you CANNOT attach custom
+# networks — so the frontend/backend split from the upgraded template doesn't
+# apply here. Pinning + optional hardening still do.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  homeassistant:
+    image: ${HOMEASSISTANT_IMAGE:-ghcr.io/home-assistant/home-assistant}:${HOMEASSISTANT_VERSION:-2026.10.2}
+    container_name: homeassistant
+    restart: unless-stopped
+    logging: *default-logging
+    network_mode: host          # required for device discovery; publishes 8123 on the host
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - ha_config:/config               # all configuration, the HA database, etc.
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro          # lets HA talk to host Bluetooth (optional)
+    # --- Zigbee / Z-Wave USB sticks: uncomment and point at your adapter ---
+    # devices:
+    #   - "/dev/ttyUSB0:/dev/ttyUSB0"
+    #   - "/dev/ttyACM0:/dev/ttyACM0"
+    healthcheck:
+      # Alpine-based image ships busybox wget; port 8123 answers (onboarding or app).
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/manifest.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s         # first boot sets up the config dir
+    mem_limit: ${HOMEASSISTANT_MEM_LIMIT:-2g}
+    mem_reservation: ${HOMEASSISTANT_MEM_RESERVATION:-256m}
+    cpus: ${HOMEASSISTANT_CPUS:-2.0}
+    # --- Optional hardening (test first; some integrations need extra access) ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+volumes:
+  ha_config:
