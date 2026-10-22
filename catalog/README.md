@@ -128,6 +128,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [AdGuard Home](infra/adguardhome/) — network-wide DNS ad & tracker blocker
 - [Watchtower](infra/watchtower/) — automatically update running containers
 - [authentik](infra/authentik/) — self-hosted SSO / identity provider (OAuth2, SAML, LDAP, proxy auth)
+- [SearXNG](infra/searxng/) — private, self-hosted metasearch engine
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
