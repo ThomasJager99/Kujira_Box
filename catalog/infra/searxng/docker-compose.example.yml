@@ -1,0 +1,50 @@
+# SearXNG — private, self-hosted metasearch engine
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# Single container, so the frontend/backend network split isn't needed here.
+# This stack SHIPS the vendor-recommended capability set (a real hardening
+# example): drop ALL caps, add back only the three the app actually needs.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  searxng:
+    image: ${SEARXNG_IMAGE:-searxng/searxng}:${SEARXNG_VERSION:-latest}
+    container_name: searxng
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    # Vendor-recommended least-privilege set: strip everything, grant only what
+    # the entrypoint needs to drop to its unprivileged user and fix file perms.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    ports:
+      - "${SEARXNG_PORT:-8080}:8080"
+    environment:
+      # Public URL users reach SearXNG by (scheme + host [+ port]).
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8080/}
+      SEARXNG_INSTANCE_NAME: ${SEARXNG_INSTANCE_NAME:-SearXNG}
+    volumes:
+      - searxng_config:/etc/searxng   # settings.yml (incl. secret_key) lives here
+    healthcheck:
+      # Alpine-based image ships busybox wget; /healthz returns 200 when up.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    mem_limit: ${SEARXNG_MEM_LIMIT:-512m}
+    mem_reservation: ${SEARXNG_MEM_RESERVATION:-64m}
+    cpus: ${SEARXNG_CPUS:-1.0}
+
+volumes:
+  searxng_config:
