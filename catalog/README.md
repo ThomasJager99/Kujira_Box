@@ -106,6 +106,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Vikunja](apps/vikunja/) — self-hosted to-do & task management (lists, kanban, calendar)
 - [Memos](apps/memos/) — lightweight self-hosted notes / microblog (Markdown)
 - [Home Assistant](apps/home-assistant/) — local-first home automation hub
+- [BookStack](apps/bookstack/) — self-hosted wiki / documentation platform
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
