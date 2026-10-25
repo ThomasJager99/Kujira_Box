@@ -1,0 +1,95 @@
+# BookStack — self-hosted wiki / documentation platform
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# Upgraded house-style template: pinned versions, frontend/backend network split
+# (DB isolated), optional hardening block, secrets in .env.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 40s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  bookstack:
+    <<: *service-defaults
+    image: ${BOOKSTACK_IMAGE:-lscr.io/linuxserver/bookstack}:${BOOKSTACK_VERSION:-latest}
+    container_name: bookstack
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Etc/UTC}
+      # MUST match how you reach BookStack (scheme + host [+ port]), or links break.
+      APP_URL: ${BOOKSTACK_APP_URL:-http://localhost:6875}
+      # Laravel app key. Generate: echo "base64:$(openssl rand -base64 32)"
+      APP_KEY: ${BOOKSTACK_APP_KEY:?set BOOKSTACK_APP_KEY in .env}
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-bookstack}
+      DB_USER: ${DB_USER:-bookstack}
+      DB_PASS: ${DB_PASS:?set DB_PASS in .env}
+    ports:
+      - "${BOOKSTACK_PORT:-6875}:80"
+    volumes:
+      - bookstack_config:/config   # app config + uploaded images/attachments
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      <<: *healthcheck-defaults
+      # LinuxServer image serves on :80; busybox wget hits the login page.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/login"]
+    mem_limit: ${BOOKSTACK_MEM_LIMIT:-1g}
+    mem_reservation: ${BOOKSTACK_MEM_RESERVATION:-128m}
+    cpus: ${BOOKSTACK_CPUS:-1.0}
+    # --- Optional hardening (test first; LSIO images can need a writable rootfs) ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+  db:
+    <<: *service-defaults
+    image: ${MARIADB_IMAGE:-mariadb}:${MARIADB_VERSION:-11}
+    container_name: bookstack_db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      MARIADB_DATABASE: ${DB_DATABASE:-bookstack}
+      MARIADB_USER: ${DB_USER:-bookstack}
+      MARIADB_PASSWORD: ${DB_PASS:?set DB_PASS in .env}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - backend          # isolated: no internet, unreachable outside the stack
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 20s
+    mem_limit: ${MARIADB_MEM_LIMIT:-512m}
+    mem_reservation: ${MARIADB_MEM_RESERVATION:-128m}
+    cpus: ${MARIADB_CPUS:-1.0}
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  bookstack_config:
+  db_data:
