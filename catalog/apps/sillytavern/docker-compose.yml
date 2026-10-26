@@ -1,0 +1,48 @@
+# SillyTavern — single-container LLM front-end
+# Copy .env.example to .env, then: docker compose up -d  →  http://localhost:8000
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  sillytavern:
+    <<: *service-defaults
+    image: ${ST_IMAGE:-ghcr.io/sillytavern/sillytavern}:${ST_VERSION:-latest}
+    container_name: sillytavern
+    ports:
+      - "${ST_PORT:-8000}:8000"
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ./config:/home/node/app/config
+      - ./data:/home/node/app/data
+      - ./plugins:/home/node/app/plugins
+      - ./extensions:/home/node/app/public/scripts/extensions/third-party
+    healthcheck:
+      <<: *healthcheck-defaults
+      # Node/Alpine image ships busybox wget; the root path serves the app.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/"]
+    mem_limit: ${ST_MEM_LIMIT:-2g}
+    mem_reservation: ${ST_MEM_RESERVATION:-256m}
+    cpus: ${ST_CPUS:-2.0}
+    # --- Optional hardening (test first) ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
