@@ -1,0 +1,82 @@
+# qBittorrent routed through a VPN (gluetun) — with kill-switch
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# SAFE-BY-DEFAULT PATTERN: gluetun is the VPN gateway; qBittorrent runs INSIDE
+# gluetun's network (network_mode: service:gluetun), so its ONLY route to the
+# internet is the VPN tunnel. If the VPN drops, gluetun's kill-switch blocks all
+# traffic — no real-IP leak. qBittorrent publishes NO ports itself; its ports are
+# published on gluetun. (Same pattern as the Transmission VPN hub.)
+#
+# Because qBittorrent shares gluetun's network namespace, the frontend/backend
+# network split from the upgraded template doesn't apply here.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  gluetun:
+    image: ${GLUETUN_IMAGE:-qmcgaw/gluetun}:${GLUETUN_VERSION:-latest}
+    container_name: gluetun
+    restart: unless-stopped
+    logging: *default-logging
+    cap_add:
+      - NET_ADMIN            # required to manage the VPN interface
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      # qBittorrent's ports are published HERE (gluetun owns the network).
+      - "${QBT_WEBUI_PORT:-8080}:8080"   # Web UI
+      - "${QBT_TORRENT_PORT:-6881}:6881/tcp"  # torrent traffic
+      - "${QBT_TORRENT_PORT:-6881}:6881/udp"
+    environment:
+      # --- VPN provider. Use your provider's name, or 'custom' for your own
+      #     WireGuard (e.g. your RB5009 + VPS tunnel). See gluetun wiki. ---
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:?set VPN_SERVICE_PROVIDER in .env}
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:?set WIREGUARD_PRIVATE_KEY in .env}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES:-}
+      # Allow your LAN to reach the Web UI through the kill-switch.
+      FIREWALL_OUTBOUND_SUBNETS: ${FIREWALL_OUTBOUND_SUBNETS:-192.168.0.0/16}
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - gluetun_config:/gluetun
+    healthcheck:
+      # gluetun ships its own health monitoring of the tunnel.
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    mem_limit: ${GLUETUN_MEM_LIMIT:-256m}
+    mem_reservation: ${GLUETUN_MEM_RESERVATION:-32m}
+    cpus: ${GLUETUN_CPUS:-1.0}
+
+  qbittorrent:
+    image: ${QBT_IMAGE:-lscr.io/linuxserver/qbittorrent}:${QBT_VERSION:-latest}
+    container_name: qbittorrent
+    restart: unless-stopped
+    logging: *default-logging
+    network_mode: "service:gluetun"   # all traffic goes through the VPN
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Etc/UTC}
+      WEBUI_PORT: ${QBT_WEBUI_PORT:-8080}   # must match the port published on gluetun
+    volumes:
+      - qbt_config:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+    # NO ports here — they are published on gluetun above.
+    mem_limit: ${QBT_MEM_LIMIT:-1g}
+    mem_reservation: ${QBT_MEM_RESERVATION:-128m}
+    cpus: ${QBT_CPUS:-2.0}
+
+volumes:
+  gluetun_config:
+  qbt_config:
