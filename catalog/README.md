@@ -118,6 +118,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Jellyseerr](media/jellyseerr/) — media request & discovery front end for Jellyfin
 - [Prowlarr](media/prowlarr/) — indexer manager/proxy for the *arr stack
 - [Sonarr](media/sonarr/) — TV series collection manager for the *arr stack
+- [qBittorrent (VPN-routed)](media/qbittorrent-vpn/) — torrent client routed through a VPN (gluetun) with kill-switch
 
 ### [Infra](infra/)
 - [Dockge](infra/dockge/) — web manager for Docker Compose stacks
