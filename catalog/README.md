@@ -107,6 +107,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Memos](apps/memos/) — lightweight self-hosted notes / microblog (Markdown)
 - [Home Assistant](apps/home-assistant/) — local-first home automation hub
 - [BookStack](apps/bookstack/) — self-hosted wiki / documentation platform
+- [code-server](apps/code-server/) — VS Code in the browser (self-hosted)
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
