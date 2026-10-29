@@ -120,6 +120,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Prowlarr](media/prowlarr/) — indexer manager/proxy for the *arr stack
 - [Sonarr](media/sonarr/) — TV series collection manager for the *arr stack
 - [qBittorrent (VPN-routed)](media/qbittorrent-vpn/) — torrent client routed through a VPN (gluetun) with kill-switch
+- [Radarr](media/radarr/) — movie collection manager for the *arr stack
 
 ### [Infra](infra/)
 - [Dockge](infra/dockge/) — web manager for Docker Compose stacks
