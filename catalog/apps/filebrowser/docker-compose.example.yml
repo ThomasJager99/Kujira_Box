@@ -1,0 +1,52 @@
+# Filebrowser — web-based file manager
+# Copy this file to docker-compose.yml and the env file to .env, then adjust.
+#
+# Single container, so the frontend/backend network split isn't needed here —
+# pinning + optional hardening apply.
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  filebrowser:
+    <<: *service-defaults
+    image: ${FB_IMAGE:-filebrowser/filebrowser}:${FB_VERSION:-latest}
+    container_name: filebrowser
+    # Run as your user so created/uploaded files get the right ownership.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "${FB_PORT:-8081}:80"
+    environment:
+      FB_DATABASE: /database/filebrowser.db
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - ${FB_ROOT_PATH:-./data}:/srv       # the folder you want to manage
+      - filebrowser_db:/database           # app database (users, settings, shares)
+    healthcheck:
+      # Alpine-based image ships busybox wget; /health returns 200 when up.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    mem_limit: ${FB_MEM_LIMIT:-256m}
+    mem_reservation: ${FB_MEM_RESERVATION:-32m}
+    cpus: ${FB_CPUS:-0.5}
+    # --- Optional hardening (test first) ---
+    # cap_drop:
+    #   - ALL
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+volumes:
+  filebrowser_db:
