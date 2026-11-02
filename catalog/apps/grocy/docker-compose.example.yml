@@ -1,0 +1,62 @@
+# Grocy — self-hosted groceries & household management ("ERP for your fridge")
+# Single container: the LinuxServer.io image bundles nginx + PHP + SQLite,
+# so there is no separate database service. State lives in /config.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill the values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  networks: [frontend]
+
+services:
+  grocy:
+    <<: *service-defaults
+    image: lscr.io/linuxserver/grocy:${GROCY_VERSION:-latest}
+    container_name: grocy
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - grocy-config:/config
+    ports:
+      - "${GROCY_HTTP_PORT:-9283}:80"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/ || exit 1"]
+    mem_limit: ${GROCY_MEM_LIMIT:-512m}
+    mem_reservation: ${GROCY_MEM_RESERVATION:-128m}
+    cpus: ${GROCY_CPUS:-1.0}
+
+    # --- Hardening (opt-in) --------------------------------------------------
+    # The LinuxServer image runs an s6 init + nginx + php-fpm as root inside
+    # the container, so it does NOT run read_only or with cap_drop [ALL] out of
+    # the box. Put it behind your reverse proxy (TLS + auth) instead, and keep
+    # it on an internal network with only the proxy able to reach it.
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+    # cap_drop:
+    #   - ALL
+
+networks:
+  frontend:
+
+volumes:
+  grocy-config:
