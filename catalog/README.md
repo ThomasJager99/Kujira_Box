@@ -109,6 +109,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [BookStack](apps/bookstack/) — self-hosted wiki / documentation platform
 - [code-server](apps/code-server/) — VS Code in the browser (self-hosted)
 - [Filebrowser](apps/filebrowser/) — web-based file managery
+- [Grocy](apps/grocy/) — self-hosted groceries & household ERP (stock, best-before, chores)
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
