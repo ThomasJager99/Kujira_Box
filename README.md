@@ -149,6 +149,24 @@ docker compose up -d
 
 - Ready-to-run service stacks (Docker Compose), each self-contained.
 
+
+## Security & hardening 🛡️
+
+Alongside the service stacks there's now a **[`hardening/`](hardening/)** section —
+practical security notes that grow one topic at a time, in step with the stacks.
+
+Built around one honest idea: **a container is a boundary, not a guarantee.** It covers:
+
+- **Protect containers from the host** — least-privilege compose, locking down the
+  Docker socket, network isolation, reverse proxy + auth — even for internet-facing services.
+- **Vet what you download** — image provenance, CVE scanning, pinning by digest,
+  signatures: knowing a stack is safe *before* you run it.
+- **Sandbox untrusted code** — disposable VMs and test environments for things you
+  don't trust yet.
+
+Start at **[`hardening/`](hardening/)**.
+
+
 ## Coming later
 
 - Step-by-step guides written for non-technical users
