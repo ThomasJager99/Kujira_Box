@@ -1,0 +1,73 @@
+# Baseline hardening block — a safe default for almost any service.
+# Copy the relevant lines into your real compose file. Every option here is
+# explained in its own entry of the hardening rubric; this is the whole first
+# round in one place.
+#
+# Assumption: the app runs fine as a non-root user with a read-only rootfs.
+# Most do. If yours doesn't, loosen ONE line at a time (see the README).
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  app:
+    image: example/app:1.2.3            # pin a version; strongest = @sha256:... (entry 19)
+    container_name: app
+    restart: unless-stopped
+    logging: *default-logging
+
+    # ── least privilege ───────────────────────────────────────────────────
+    user: "1000:1000"                   # run as an unprivileged UID/GID (entry 02)
+    read_only: true                     # immutable root filesystem (entry 04)
+    tmpfs:                              # give back only the writable paths it needs
+      - /tmp
+      # - /run
+    cap_drop:
+      - ALL                             # drop ALL Linux capabilities (entry 03)
+    # cap_add:                          # ...then add back ONLY what the app truly needs
+    #   - CHOWN
+    #   - SETUID
+    #   - SETGID
+    security_opt:
+      - no-new-privileges:true          # block privilege escalation via setuid (entry 03)
+
+    # ── resource containment ──────────────────────────────────────────────
+    mem_limit: 512m                     # hard memory ceiling
+    mem_reservation: 128m               # soft floor
+    cpus: 1.0
+    pids_limit: 200                     # cap process count — stops fork bombs (entry 05)
+
+    # ── data & networking ─────────────────────────────────────────────────
+    volumes:
+      - app-data:/data                  # named volume for state the app must write
+    ports:
+      - "8080:8080"                     # NOTE: this can bypass ufw — see entry 07
+    networks:
+      - frontend                        # app is reachable; it is NOT on backend
+
+  db:
+    image: postgres:16-alpine
+    container_name: db
+    restart: unless-stopped
+    logging: *default-logging
+    user: "999:999"                     # postgres image's own non-root uid
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong password in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - backend                         # DB is ONLY on the internal network
+
+networks:
+  frontend:                             # has a route out / is proxied to
+  backend:
+    internal: true                      # no egress at all — DB can't phone home (entry 06)
+
+volumes:
+  app-data:
+  db-data:
