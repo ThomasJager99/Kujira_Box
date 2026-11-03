@@ -136,6 +136,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Watchtower](infra/watchtower/) — automatically update running containers
 - [authentik](infra/authentik/) — self-hosted SSO / identity provider (OAuth2, SAML, LDAP, proxy auth)
 - [SearXNG](infra/searxng/) — private, self-hosted metasearch engine
+- [Woodpecker CI](infra/woodpecker/) — lightweight, forge-native CI/CD (pairs with Gitea)
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
