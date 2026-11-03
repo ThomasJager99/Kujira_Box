@@ -1,0 +1,91 @@
+# Woodpecker CI — lightweight CI/CD engine that plugs into your Git forge.
+# Two parts:
+#   - server : web UI + talks to your forge (Gitea here), stores state (SQLite)
+#   - agent  : actually runs each pipeline step as a Docker container
+#
+# ⚠️ The AGENT mounts the Docker socket — it has to, because its whole job is
+# to start containers. That makes the agent effectively root on its host. Run
+# agents on a host you're willing to treat as disposable/CI-only, not next to
+# sensitive services. See the README + the hardening rubric (docker socket).
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  server:
+    <<: *service-defaults
+    image: woodpeckerci/woodpecker-server:${WOODPECKER_VERSION:-v3.20.1}
+    container_name: woodpecker-server
+    environment:
+      # --- public address (must match what the forge redirects back to) ----
+      WOODPECKER_HOST: ${WOODPECKER_HOST:?e.g. https://ci.example.com}
+      WOODPECKER_OPEN: ${WOODPECKER_OPEN:-false}        # false = closed, admins add repos
+      WOODPECKER_ADMIN: ${WOODPECKER_ADMIN:?your forge username}
+      # --- forge: Gitea -----------------------------------------------------
+      WOODPECKER_GITEA: "true"
+      WOODPECKER_GITEA_URL: ${WOODPECKER_GITEA_URL:?e.g. https://git.example.com}
+      WOODPECKER_GITEA_CLIENT: ${WOODPECKER_GITEA_CLIENT:?OAuth2 client id}
+      WOODPECKER_GITEA_SECRET: ${WOODPECKER_GITEA_SECRET:?OAuth2 client secret}
+      # --- shared secret the agent authenticates with -----------------------
+      WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?openssl rand -hex 32}
+    volumes:
+      - woodpecker-server-data:/var/lib/woodpecker   # SQLite + state
+    ports:
+      - "${WOODPECKER_WEB_PORT:-8000}:8000"           # web UI
+      - "${WOODPECKER_GRPC_PORT:-9000}:9000"          # agents connect here (gRPC)
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "woodpecker-server ping || exit 1"]
+    mem_limit: ${WOODPECKER_SERVER_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${WOODPECKER_SERVER_CPUS:-1.0}
+    networks: [woodpecker]
+
+  agent:
+    <<: *service-defaults
+    image: woodpeckerci/woodpecker-agent:${WOODPECKER_VERSION:-v3.20.1}
+    container_name: woodpecker-agent
+    command: agent
+    depends_on:
+      - server
+    environment:
+      WOODPECKER_SERVER: ${WOODPECKER_AGENT_SERVER:-server:9000}
+      WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?must match the server}
+      WOODPECKER_MAX_WORKFLOWS: ${WOODPECKER_MAX_WORKFLOWS:-2}
+    volumes:
+      - woodpecker-agent-config:/etc/woodpecker
+      # REQUIRED: the agent starts pipeline containers via this socket.
+      # This is the privileged bit — read the note at the top of this file.
+      - /var/run/docker.sock:/var/run/docker.sock
+    mem_limit: ${WOODPECKER_AGENT_MEM_LIMIT:-1g}
+    mem_reservation: 256m
+    cpus: ${WOODPECKER_AGENT_CPUS:-2.0}
+    networks: [woodpecker]
+
+networks:
+  woodpecker:
+    # Single network on purpose: the agent needs egress (to pull step images)
+    # and the server needs to reach your forge, so an `internal: true` backend
+    # would buy little here. Isolation for CI belongs at the HOST level.
+
+volumes:
+  woodpecker-server-data:
+  woodpecker-agent-config:
