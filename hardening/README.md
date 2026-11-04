@@ -53,6 +53,7 @@ lives in the compose file.
 
 1. [Threat model & baseline hardening](01-threat-model/) — is a container a security boundary? + the first round of defense, as one copy-paste block.
 2. [Drop root](02-drop-root/) — run containers as a non-root user; the single highest-value line in the baseline block.
+3. [Capabilities](03-capabilities/) — `cap_drop: [ALL]` + selective add-back + `no-new-privileges`: strip root's leftover superpowers.
 
 ## Using these
 
