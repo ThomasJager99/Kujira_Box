@@ -110,6 +110,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [code-server](apps/code-server/) — VS Code in the browser (self-hosted)
 - [Filebrowser](apps/filebrowser/) — web-based file managery
 - [Grocy](apps/grocy/) — self-hosted groceries & household ERP (stock, best-before, chores)
+- [PairDrop](apps/pairdrop/) — local, browser-based P2P file sharing (open AirDrop)
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
