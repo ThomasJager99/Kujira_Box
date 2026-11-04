@@ -1,0 +1,62 @@
+# PairDrop — local, browser-based file sharing (an open AirDrop for every device).
+# It's only a SIGNALING server: it helps two browsers find each other, then the
+# files go peer-to-peer (WebRTC) and never touch the server. So there's no data
+# volume to back up — the container is effectively stateless.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  networks: [frontend]
+
+services:
+  pairdrop:
+    <<: *service-defaults
+    image: lscr.io/linuxserver/pairdrop:${PAIRDROP_VERSION:-version-v1.11.2}
+    container_name: pairdrop
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Berlin}
+      # Pair devices that share a public IP (normal for one LAN). If you put
+      # PairDrop behind a reverse proxy, it must pass the real client IP
+      # (X-Forwarded-For) or every device looks identical and can't pair.
+      RATE_LIMIT: ${PAIRDROP_RATE_LIMIT:-false}
+      # Turn on a WebSocket fallback for networks where WebRTC P2P is blocked.
+      WS_FALLBACK: ${PAIRDROP_WS_FALLBACK:-false}
+    ports:
+      - "${PAIRDROP_PORT:-3000}:3000"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+    mem_limit: ${PAIRDROP_MEM_LIMIT:-256m}
+    mem_reservation: 64m
+    cpus: ${PAIRDROP_CPUS:-0.5}
+
+    # --- Hardening (opt-in) --------------------------------------------------
+    # LinuxServer images run an s6 init as root inside the container, so
+    # read_only / cap_drop [ALL] aren't a clean fit out of the box. Since this
+    # is stateless, it's a good candidate to put behind your reverse proxy with
+    # TLS and keep on an internal network.
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+networks:
+  frontend:
