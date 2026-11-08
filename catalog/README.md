@@ -124,6 +124,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Sonarr](media/sonarr/) — TV series collection manager for the *arr stack
 - [qBittorrent (VPN-routed)](media/qbittorrent-vpn/) — torrent client routed through a VPN (gluetun) with kill-switch
 - [Radarr](media/radarr/) — movie collection manager for the *arr stack
+- [Calibre-Web](media/calibre-web/) — web front-end for an existing Calibre e-book library
 
 ### [Infra](infra/)
 - [Dockge](infra/dockge/) — web manager for Docker Compose stacks
