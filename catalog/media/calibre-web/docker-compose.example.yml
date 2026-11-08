@@ -1,0 +1,66 @@
+# Calibre-Web — a clean web reader/manager for an existing Calibre e-book library.
+# NOTE: it is a front-end to a library that Calibre (the desktop app) created —
+# it reads the library's metadata.db. Point BOOKS_PATH at a folder that already
+# contains a Calibre library (or let Calibre-Web create one on first run).
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  networks: [frontend]
+
+services:
+  calibre-web:
+    <<: *service-defaults
+    image: lscr.io/linuxserver/calibre-web:${CALIBRE_WEB_VERSION:-0.6.27}
+    container_name: calibre-web
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Berlin}
+      # Optional: enable e-book format conversion + send-to-kindle by baking in
+      # Calibre's binaries via a LinuxServer mod. Adds ~weight; leave unset if
+      # you don't need conversion.
+      DOCKER_MODS: ${CALIBRE_WEB_MODS:-linuxserver/mods:universal-calibre}
+    volumes:
+      - calibre-web-config:/config           # app settings + its internal DB
+      - ${BOOKS_PATH:?set the path to your Calibre library}:/books
+    ports:
+      - "${CALIBRE_WEB_PORT:-8083}:8083"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/ >/dev/null || exit 1"]
+    mem_limit: ${CALIBRE_WEB_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${CALIBRE_WEB_CPUS:-1.0}
+
+    # --- Hardening (opt-in) --------------------------------------------------
+    # LinuxServer images run an s6 init as root inside the container, so
+    # read_only / cap_drop [ALL] / user: aren't a clean fit here (see the
+    # hardening rubric). Lean on the other defenses: reverse proxy + TLS,
+    # internal network, no socket, no privileged.
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+networks:
+  frontend:
+
+volumes:
+  calibre-web-config:
