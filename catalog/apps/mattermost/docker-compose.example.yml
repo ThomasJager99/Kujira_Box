@@ -1,0 +1,102 @@
+# Mattermost (Team Edition) — self-hosted team chat, a Slack/Discord alternative.
+# Two services: the Mattermost app + a PostgreSQL database.
+#
+# This stack shows the FULL upgraded template on a non-LinuxServer image:
+#  - frontend/backend network split — the DB has NO route out (internal: true)
+#  - the app runs its official non-root user, so cap_drop:[ALL] is ACTIVE here
+#  - the DB keeps a light touch (needs a few caps at init) — see the note on it
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 60s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  mattermost:
+    <<: *service-defaults
+    image: mattermost/mattermost-team-edition:${MATTERMOST_VERSION:-12.0.2}
+    container_name: mattermost
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: "postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}?sslmode=disable&connect_timeout=10"
+      # Public address users reach the server on (needed for links, CORS, etc.)
+      MM_SERVICESETTINGS_SITEURL: ${MM_SITE_URL:?e.g. https://chat.example.com}
+    volumes:
+      - mm-config:/mattermost/config
+      - mm-data:/mattermost/data
+      - mm-logs:/mattermost/logs
+      - mm-plugins:/mattermost/plugins
+      - mm-client-plugins:/mattermost/client/plugins
+      - mm-bleve:/mattermost/bleve-indexes
+    ports:
+      - "${MATTERMOST_PORT:-8065}:8065"
+    # LEVEL 2 (active): the image already runs as its non-root user (uid 2000)
+    # and binds a high port, so it needs no capabilities at all.
+    cap_drop:
+      - ALL
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8065/api/v4/system/ping || exit 1"]
+    mem_limit: ${MATTERMOST_MEM_LIMIT:-2g}
+    mem_reservation: 512m
+    cpus: ${MATTERMOST_CPUS:-2.0}
+    pids_limit: ${MATTERMOST_PIDS_LIMIT:-300}
+    networks: [frontend, backend]
+
+  db:
+    <<: *service-defaults
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    container_name: mattermost-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes:
+      - mm-db:/var/lib/postgresql/data
+    # NOTE on the DB + cap_drop: the postgres image chowns its data dir as root
+    # at first init, so a blanket cap_drop:[ALL] can break initdb. We leave it
+    # off here and rely on no-new-privileges + the internal network instead. If
+    # you want to lock it down: cap_drop:[ALL] then cap_add:[CHOWN,SETUID,
+    # SETGID,DAC_OVERRIDE,FOWNER] — test that initdb still succeeds.
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${POSTGRES_CPUS:-1.0}
+    pids_limit: ${POSTGRES_PIDS_LIMIT:-200}
+    networks: [backend]
+
+networks:
+  frontend:
+  backend:
+    internal: true          # DB reachable only inside the stack — no egress
+
+volumes:
+  mm-config:
+  mm-data:
+  mm-logs:
+  mm-plugins:
+  mm-client-plugins:
+  mm-bleve:
+  mm-db:
