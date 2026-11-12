@@ -148,6 +148,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Dozzle](observability/dozzle/) — real-time Docker log viewer in the browser
 - [Scrutiny](observability/scrutiny/) — S.M.A.R.T. disk health monitoring dashboard
 - [Umami](observability/umami/) — privacy-friendly, self-hosted web analytics
+- [Speedtest Tracker](observability/speedtest-tracker/) — scheduled internet speed tests with a history dashboard
 
 ### [Databases](databases/)
 - [MySQL](databases/mysql/) — MySQL/MariaDB instance for development & learning
