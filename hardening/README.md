@@ -56,6 +56,7 @@ lives in the compose file.
 3. [Capabilities](03-capabilities/) — `cap_drop: [ALL]` + selective add-back + `no-new-privileges`: strip root's leftover superpowers.
 4. [Read-only rootfs + tmpfs](04-read-only-rootfs/) — freeze the container's filesystem; hand back only the scratch paths it needs.
 5. [Resource & PID limits](05-resource-limits/) — stop one container starving the host: `mem_limit` / `cpus` / `pids_limit`.
+6. [Network segmentation](06-network-segmentation/) — `internal: true` backends with no egress: cut off exfiltration and phone-home.
 
 ## Using these
 
