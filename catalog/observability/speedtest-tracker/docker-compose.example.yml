@@ -1,0 +1,76 @@
+# Speedtest Tracker — scheduled internet speed tests with a history dashboard.
+# It runs Ookla Speedtest on a cron you set, stores the results (SQLite here)
+# and charts download/upload/ping/jitter over time, with alerting.
+#
+# NOTE for the hardening rubric: this app is the textbook service that MUST
+# have internet egress — measuring your line speed is literally its job. So it
+# can't live on a no-egress internal network (see hardening entry 06). Harden
+# the other layers instead.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  networks: [frontend]
+
+services:
+  speedtest-tracker:
+    <<: *service-defaults
+    image: ghcr.io/alexjustesen/speedtest-tracker:${SPEEDTEST_VERSION:-v1.15.1}
+    container_name: speedtest-tracker
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Berlin}
+      # Laravel app key — REQUIRED. Generate once and keep it stable:
+      #   echo "base64:$(openssl rand -base64 32)"
+      APP_KEY: ${APP_KEY:?generate with: echo "base64:$(openssl rand -base64 32)"}
+      # Public URL you reach the dashboard on (used for links/assets).
+      APP_URL: ${APP_URL:-http://localhost:8765}
+      DB_CONNECTION: sqlite
+      # When to run tests (cron). Default here: every hour on the hour.
+      SPEEDTEST_SCHEDULE: ${SPEEDTEST_SCHEDULE:-0 * * * *}
+      # Optional: pin specific Ookla server IDs (comma-separated). Empty = auto.
+      SPEEDTEST_SERVERS: ${SPEEDTEST_SERVERS:-}
+    volumes:
+      - speedtest-config:/config          # SQLite DB + app config/state
+    ports:
+      - "${SPEEDTEST_PORT:-8765}:80"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -fsS http://localhost:80/api/healthcheck || exit 1"]
+    mem_limit: ${SPEEDTEST_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${SPEEDTEST_CPUS:-1.0}
+    pids_limit: ${SPEEDTEST_PIDS_LIMIT:-200}
+
+    # --- Hardening (opt-in) --------------------------------------------------
+    # The image runs an s6/servers- style init that writes as root at startup,
+    # so a blanket read_only / cap_drop:[ALL] / user: isn't a clean fit. And it
+    # MUST keep egress (it reaches out to speedtest servers). Lean on: reverse
+    # proxy + TLS, no socket, no privileged, and the limits above.
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+networks:
+  frontend:                 # NOT internal — the app needs to reach the internet
+
+volumes:
+  speedtest-config:
