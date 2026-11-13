@@ -112,6 +112,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Grocy](apps/grocy/) — self-hosted groceries & household ERP (stock, best-before, chores)
 - [PairDrop](apps/pairdrop/) — local, browser-based P2P file sharing (open AirDrop)
 - [Mattermost](apps/mattermost/) — self-hosted team chat (Slack/Discord alternative)
+- [Changedetection.io](apps/changedetection/) — watch web pages and get notified when they change
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
