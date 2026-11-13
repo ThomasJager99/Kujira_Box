@@ -1,0 +1,87 @@
+# Changedetection.io — watch any web page and get notified when it changes.
+# Price drops, stock/restocks, doc edits, policy changes, new postings — it
+# fetches a page on a schedule, diffs it, and alerts you.
+#
+# Two containers:
+#   - changedetection : the app + scheduler + web UI + diff engine
+#   - browser         : a headless Chrome (sockpuppetbrowser) for pages that
+#                       need JavaScript to render. It is NOT exposed — only the
+#                       app talks to it, over the internal docker network.
+#
+# Both need internet egress (they fetch the sites you watch), so neither sits on
+# an `internal` network — but the browser publishes NO port (hardening entry 07:
+# don't expose what only another container needs).
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  networks: [web]
+
+services:
+  changedetection:
+    <<: *service-defaults
+    image: ghcr.io/dgtlmoon/changedetection.io:${CHANGEDETECTION_VERSION:-0.70.3}
+    container_name: changedetection
+    depends_on:
+      - browser
+    environment:
+      # Public URL the UI is reached on (used in notification links).
+      BASE_URL: ${BASE_URL:-http://localhost:5000}
+      TZ: ${TZ:-Europe/Berlin}
+      # Point the app at the headless browser for JS-rendered pages.
+      PLAYWRIGHT_DRIVER_URL: "ws://browser:3000"
+      # How many checks run at once (don't hammer your CPU / target sites).
+      FETCH_WORKERS: ${FETCH_WORKERS:-10}
+    volumes:
+      - changedetection-data:/datastore     # watches, history, settings
+    ports:
+      - "${CHANGEDETECTION_PORT:-5000}:5000"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5000/ || exit 1"]
+    mem_limit: ${CHANGEDETECTION_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${CHANGEDETECTION_CPUS:-1.0}
+    pids_limit: ${CHANGEDETECTION_PIDS_LIMIT:-300}
+
+  browser:
+    <<: *service-defaults
+    image: dgtlmoon/sockpuppetbrowser:${SOCKPUPPET_VERSION:-latest}
+    container_name: changedetection-browser
+    # NO ports: — reachable only by the app over the `web` network.
+    environment:
+      SCREEN_WIDTH: 1920
+      SCREEN_HEIGHT: 1024
+      MAX_CONCURRENT_CHROME_PROCESSES: ${MAX_CHROME:-10}
+    # Chrome needs a bit of shared memory or it crashes rendering big pages.
+    shm_size: ${BROWSER_SHM_SIZE:-2gb}
+    # Chrome's sandbox needs SYS_ADMIN; this is the one place we add a cap back
+    # (see hardening entry 03). Keep the container unexposed to offset it.
+    cap_add:
+      - SYS_ADMIN
+    mem_limit: ${BROWSER_MEM_LIMIT:-1g}
+    mem_reservation: 256m
+    cpus: ${BROWSER_CPUS:-2.0}
+
+networks:
+  web:                       # NOT internal — both need egress to fetch sites
+
+volumes:
+  changedetection-data:
