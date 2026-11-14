@@ -1,0 +1,89 @@
+# Private Docker Registry + Web UI — host your own container images.
+# Two containers:
+#   - registry : the storage backend (the real registry, Distribution v3)
+#   - ui       : Joxit's web UI, which ALSO proxies the registry API, so clients
+#                push/pull through the UI's port and the registry itself stays
+#                unpublished and on an internal, no-egress network.
+#
+# First published service on the new template: the host bind address is a
+# variable (LISTEN_ADDR) — set it to 127.0.0.1 in .env to keep the UI host-only
+# behind your reverse proxy (see hardening entry 07).
+#
+# Copy to docker-compose.yml, copy .env.example to .env, create the htpasswd
+# file (see README), then:  docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  registry:
+    <<: *service-defaults
+    image: registry:${REGISTRY_VERSION:-3.1.2}
+    container_name: registry
+    environment:
+      # Require a login for push/pull (htpasswd file you create, see README).
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: "Registry Realm"
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      # Allow deleting images/tags (the UI's delete button needs this).
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry-data:/var/lib/registry      # your stored images live here
+      - ${AUTH_DIR:-./auth}:/auth:ro          # htpasswd file, read-only
+    # NO ports: — the registry is reached only through the UI's proxy.
+    mem_limit: ${REGISTRY_MEM_LIMIT:-1g}
+    mem_reservation: 256m
+    cpus: ${REGISTRY_CPUS:-1.0}
+    pids_limit: ${REGISTRY_PIDS_LIMIT:-200}
+    networks: [backend]
+
+  ui:
+    <<: *service-defaults
+    image: joxit/docker-registry-ui:${REGISTRY_UI_VERSION:-2.6.0}
+    container_name: registry-ui
+    depends_on:
+      - registry
+    environment:
+      SINGLE_REGISTRY: "true"
+      REGISTRY_TITLE: ${REGISTRY_TITLE:-Private Docker Registry}
+      DELETE_IMAGES: "true"
+      SHOW_CONTENT_DIGEST: "true"
+      SHOW_CATALOG_NB_TAGS: "true"
+      # The UI's nginx proxies /v2/ (the registry API) to the backend, so
+      # `docker push <ui-host>:<port>/image` works through this one port.
+      NGINX_PROXY_PASS_URL: "http://registry:5000"
+      # Allow large layer uploads through the proxy.
+      NGINX_PROXY_HEADER_Authorization: "$$http_authorization"
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${REGISTRY_UI_PORT:-5080}:80"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/ || exit 1"]
+    mem_limit: ${UI_MEM_LIMIT:-256m}
+    mem_reservation: 64m
+    cpus: ${UI_CPUS:-0.5}
+    pids_limit: ${UI_PIDS_LIMIT:-100}
+    networks: [frontend, backend]
+
+networks:
+  frontend:
+  backend:
+    internal: true      # the registry stores images; it never needs egress
+
+volumes:
+  registry-data:
