@@ -141,6 +141,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [authentik](infra/authentik/) — self-hosted SSO / identity provider (OAuth2, SAML, LDAP, proxy auth)
 - [SearXNG](infra/searxng/) — private, self-hosted metasearch engine
 - [Woodpecker CI](infra/woodpecker/) — lightweight, forge-native CI/CD (pairs with Gitea)
+- [Docker Registry + UI](infra/docker-registry/) — private container registry with a web UI
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
