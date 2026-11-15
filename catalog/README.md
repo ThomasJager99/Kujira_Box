@@ -113,6 +113,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [PairDrop](apps/pairdrop/) — local, browser-based P2P file sharing (open AirDrop)
 - [Mattermost](apps/mattermost/) — self-hosted team chat (Slack/Discord alternative)
 - [Changedetection.io](apps/changedetection/) — watch web pages and get notified when they change
+- [Excalidraw](apps/excalidraw/) — hand-drawn-style virtual whiteboard (self-hosted frontend)
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
