@@ -1,0 +1,66 @@
+# Excalidraw — a hand-drawn-style virtual whiteboard for sketching diagrams,
+# wireframes and ideas. The self-hosted container is the STATIC frontend: the
+# app runs entirely in your browser and saves to the browser's local storage.
+# There is no server-side database, so the container is stateless.
+#
+# NOTE: live multi-user collaboration needs the separate `excalidraw-room`
+# websocket server (optional, not included here — see the README). Solo use and
+# local saving work out of the box.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 15s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  networks: [frontend]
+
+services:
+  excalidraw:
+    <<: *service-defaults
+    image: excalidraw/excalidraw:${EXCALIDRAW_VERSION:-latest}
+    container_name: excalidraw
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${EXCALIDRAW_PORT:-5090}:80"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/ || exit 1"]
+    mem_limit: ${EXCALIDRAW_MEM_LIMIT:-256m}
+    mem_reservation: 64m
+    cpus: ${EXCALIDRAW_CPUS:-0.5}
+    pids_limit: ${EXCALIDRAW_PIDS_LIMIT:-100}
+
+    # --- Hardening (opt-in, good Level-2 candidate) --------------------------
+    # This is a stateless static site, so read_only fits cleanly — nginx just
+    # needs a couple of writable scratch paths. cap_drop:[ALL] needs
+    # NET_BIND_SERVICE added back because nginx binds port 80 inside the
+    # container (see hardening entry 03). Uncomment to lock it down:
+    # read_only: true
+    # tmpfs:
+    #   - /var/cache/nginx
+    #   - /var/run
+    #   - /tmp
+    # cap_drop:
+    #   - ALL
+    # cap_add:
+    #   - NET_BIND_SERVICE
+    #   - CHOWN
+    #   - SETUID
+    #   - SETGID
+
+networks:
+  frontend:
