@@ -59,6 +59,7 @@ lives in the compose file.
 6. [Network segmentation](06-network-segmentation/) — `internal: true` backends with no egress: cut off exfiltration and phone-home.
 7. [Host firewall & the Docker-bypasses-UFW trap](07-docker-ufw-trap/) — why `ufw status` lies about published container ports, and the three fixes.
 8. [The Docker socket is root](08-docker-socket/) — why mounting docker.sock = handing over the host, and the socket-proxy that fixes it.
+9. [Reverse proxy + TLS in front of everything](09-reverse-proxy-tls/) — one hardened front door instead of a dozen exposed app ports.
 
 ## Using these
 
