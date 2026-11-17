@@ -1,0 +1,53 @@
+# Stalwart Mail — a modern all-in-one mail server (SMTP + IMAP + POP3 + JMAP +
+# spam filtering + web admin) in a single container.
+#
+# ⚠️ HONEST WARNING: running your own mail server is the hardest self-host there
+# is — not because of this compose, but because of everything AROUND it: public
+# DNS (MX, SPF, DKIM, DMARC), reverse DNS (PTR) on your IP, a static IP that
+# isn't on a residential/blocklist range, and port 25 not blocked by your ISP.
+# Get those wrong and your mail silently lands in spam or bounces. Read the
+# Stalwart docs before trusting this with real mail. This file is the easy part.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, then:
+#   docker compose up -d   (then read the logs for the generated admin password)
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:${STALWART_VERSION:-v1.1.0}
+    container_name: stalwart
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    hostname: ${MAIL_HOSTNAME:-mail.example.com}
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - stalwart-data:/opt/stalwart        # config + mailboxes + indexes + certs
+    ports:
+      # --- Mail protocols: these MUST be publicly reachable (0.0.0.0) ---------
+      # other mail servers connect to :25 from the internet; you can't hide them
+      # behind localhost. LISTEN_ADDR is intentionally NOT applied here.
+      - "25:25"           # SMTP (receiving mail from other servers)
+      - "465:465"         # SMTPS (submission, implicit TLS)
+      - "587:587"         # submission (STARTTLS)
+      - "143:143"         # IMAP (STARTTLS)
+      - "993:993"         # IMAPS (implicit TLS)
+      - "4190:4190"       # ManageSieve (mail filters)
+      # - "110:110"       # POP3  (uncomment if you need POP3)
+      # - "995:995"       # POP3S
+      # --- Web admin / JMAP / HTTP: this one CAN be host-only + proxied -------
+      - "${LISTEN_ADDR:-0.0.0.0}:${STALWART_WEB_PORT:-8080}:8080"
+    mem_limit: ${STALWART_MEM_LIMIT:-2g}
+    mem_reservation: 512m
+    cpus: ${STALWART_CPUS:-2.0}
+    pids_limit: ${STALWART_PIDS_LIMIT:-400}
+
+volumes:
+  stalwart-data:
