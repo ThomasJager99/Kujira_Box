@@ -143,6 +143,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [SearXNG](infra/searxng/) — private, self-hosted metasearch engine
 - [Woodpecker CI](infra/woodpecker/) — lightweight, forge-native CI/CD (pairs with Gitea)
 - [Docker Registry + UI](infra/docker-registry/) — private container registry with a web UI
+- [Stalwart Mail](infra/stalwart/) — modern all-in-one mail server (SMTP/IMAP/JMAP)
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
