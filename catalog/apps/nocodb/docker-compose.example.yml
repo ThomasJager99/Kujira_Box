@@ -1,0 +1,85 @@
+# NocoDB — an open-source Airtable alternative. Turns a database into a smart
+# spreadsheet: grid/kanban/gallery/calendar views, forms, relations, automations
+# and a REST/GraphQL API over your data. This stack uses PostgreSQL (recommended
+# over the built-in SQLite for anything you care about).
+#
+# Two services: NocoDB + PostgreSQL. DB is on an internal, no-egress network.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 30s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  nocodb:
+    <<: *service-defaults
+    image: nocodb/nocodb:${NOCODB_VERSION:-2026.10.1}
+    container_name: nocodb
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Connection to Postgres (built from the POSTGRES_* values below).
+      NC_DB: "pg://db:5432?u=${POSTGRES_USER:?}&p=${POSTGRES_PASSWORD:?}&d=${POSTGRES_DB:?}"
+      # Secret used to sign auth tokens — generate once: openssl rand -hex 32
+      NC_AUTH_JWT_SECRET: ${NC_AUTH_JWT_SECRET:?generate with: openssl rand -hex 32}
+      # Public URL the app is reached on (used for invite/share links).
+      NC_PUBLIC_URL: ${NC_PUBLIC_URL:-http://localhost:8080}
+      # Disable anonymous telemetry.
+      NC_DISABLE_TELE: "true"
+    volumes:
+      - nocodb-data:/usr/app/data          # attachments + local metadata
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${NOCODB_PORT:-8080}:8080"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/api/health || exit 1"]
+    mem_limit: ${NOCODB_MEM_LIMIT:-1g}
+    mem_reservation: 256m
+    cpus: ${NOCODB_CPUS:-1.0}
+    pids_limit: ${NOCODB_PIDS_LIMIT:-300}
+    networks: [frontend, backend]
+
+  db:
+    <<: *service-defaults
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    container_name: nocodb-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes:
+      - nocodb-db:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${POSTGRES_CPUS:-1.0}
+    pids_limit: ${POSTGRES_PIDS_LIMIT:-200}
+    networks: [backend]
+
+networks:
+  frontend:
+  backend:
+    internal: true          # DB reachable only inside the stack — no egress
+
+volumes:
+  nocodb-data:
+  nocodb-db:
