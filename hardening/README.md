@@ -62,6 +62,7 @@ lives in the compose file.
 9. [Reverse proxy + TLS in front of everything](09-reverse-proxy-tls/) — one hardened front door instead of a dozen exposed app ports.
 10.[Forward-auth / SSO in front of everything](10-forward-auth-sso/) — one login layer that gates requests before they reach the app.
 11.[Blocking brute-force: fail2ban & CrowdSec](11-fail2ban-crowdsec/) — watch logs, ban the IPs that keep knocking.
+12.[Rootless Docker](12-rootless-docker/) — run the daemon as a normal user so an escape lands unprivileged, not on host root.
 
 ## Using these
 
