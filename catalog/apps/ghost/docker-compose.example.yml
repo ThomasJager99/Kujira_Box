@@ -1,0 +1,87 @@
+# Ghost — a modern publishing platform: blog, newsletter and membership site in
+# one. Clean editor, built-in themes, email newsletters, paid subscriptions.
+# A great way to self-host your own blog on your own domain.
+#
+# Two services: Ghost + MySQL 8 (Ghost officially supports MySQL 8). The DB is
+# on an internal, no-egress network.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 40s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  ghost:
+    <<: *service-defaults
+    image: ghost:${GHOST_VERSION:-6-alpine}
+    container_name: ghost
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Public URL — REQUIRED and must match how readers reach the site, or
+      # Ghost will redirect/break. Behind a proxy this is your https host.
+      url: ${GHOST_URL:?e.g. https://blog.example.com}
+      NODE_ENV: production
+      database__client: mysql
+      database__connection__host: db
+      database__connection__user: ${MYSQL_USER:?}
+      database__connection__password: ${MYSQL_PASSWORD:?}
+      database__connection__database: ${MYSQL_DATABASE:?}
+    volumes:
+      - ghost-content:/var/lib/ghost/content     # themes, images, posts, config
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${GHOST_PORT:-2368}:2368"
+    # No healthcheck: Ghost 301-redirects any request whose host/protocol don't
+    # match `url`, which makes a local container-side HTTP check flaky. The DB
+    # dependency + restart policy cover startup ordering.
+    mem_limit: ${GHOST_MEM_LIMIT:-1g}
+    mem_reservation: 256m
+    cpus: ${GHOST_CPUS:-1.0}
+    pids_limit: ${GHOST_PIDS_LIMIT:-300}
+    networks: [frontend, backend]
+
+  db:
+    <<: *service-defaults
+    image: mysql:${MYSQL_VERSION:-8.0}
+    container_name: ghost-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?}
+      MYSQL_USER: ${MYSQL_USER:?}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?}
+    volumes:
+      - ghost-db:/var/lib/mysql
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+    mem_limit: ${MYSQL_MEM_LIMIT:-512m}
+    mem_reservation: 256m
+    cpus: ${MYSQL_CPUS:-1.0}
+    pids_limit: ${MYSQL_PIDS_LIMIT:-200}
+    networks: [backend]
+
+networks:
+  frontend:
+  backend:
+    internal: true          # DB reachable only inside the stack — no egress
+
+volumes:
+  ghost-content:
+  ghost-db:
