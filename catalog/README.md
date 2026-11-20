@@ -116,6 +116,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Excalidraw](apps/excalidraw/) — hand-drawn-style virtual whiteboard (self-hosted frontend)
 - [NocoDB](apps/nocodb/) — open-source Airtable alternative (smart spreadsheet over a database)
 - [Ghost](apps/ghost/) — modern publishing platform (blog, newsletter, memberships)
+- [Metabase](apps/metabase/) — open-source business intelligence & dashboards over your databases
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
