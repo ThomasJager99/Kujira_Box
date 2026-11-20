@@ -63,6 +63,7 @@ lives in the compose file.
 10.[Forward-auth / SSO in front of everything](10-forward-auth-sso/) — one login layer that gates requests before they reach the app.
 11.[Blocking brute-force: fail2ban & CrowdSec](11-fail2ban-crowdsec/) — watch logs, ban the IPs that keep knocking.
 12.[Rootless Docker](12-rootless-docker/) — run the daemon as a normal user so an escape lands unprivileged, not on host root.
+13.[Podman: rootless & daemonless by default](13-podman/) — the engine that starts where hardened Docker ends up.
 
 ## Using these
 
