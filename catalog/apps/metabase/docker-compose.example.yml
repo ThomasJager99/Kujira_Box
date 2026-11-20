@@ -1,0 +1,87 @@
+# Metabase — open-source business intelligence. Point it at your databases and
+# build dashboards, charts and questions without writing SQL (or with it). Great
+# for turning any app's Postgres/MySQL into readable charts and shared reports.
+#
+# Two services: Metabase + a PostgreSQL "application database" (where Metabase
+# stores ITS OWN config/questions/dashboards — not your data). The DB is on an
+# internal, no-egress network.
+#
+# NOTE: Metabase runs on the JVM — we cap its heap with JAVA_OPTS so it lives
+# comfortably inside mem_limit (see hardening entry 05: tell the JVM its limit
+# or it sizes to the host and gets OOM-killed).
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 90s        # Metabase (JVM + migrations) is slow on first boot
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  metabase:
+    <<: *service-defaults
+    image: metabase/metabase:${METABASE_VERSION:-v0.65.6}
+    container_name: metabase
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: db
+      MB_DB_PORT: 5432
+      MB_DB_DBNAME: ${POSTGRES_DB:?}
+      MB_DB_USER: ${POSTGRES_USER:?}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:?}
+      # Cap the JVM heap so it fits under mem_limit below.
+      JAVA_OPTS: ${METABASE_JAVA_OPTS:--Xmx1g}
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${METABASE_PORT:-3000}:3000"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+    mem_limit: ${METABASE_MEM_LIMIT:-2g}
+    mem_reservation: 512m
+    cpus: ${METABASE_CPUS:-2.0}
+    pids_limit: ${METABASE_PIDS_LIMIT:-300}
+    networks: [frontend, backend]
+
+  db:
+    <<: *service-defaults
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    container_name: metabase-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes:
+      - metabase-db:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${POSTGRES_CPUS:-1.0}
+    pids_limit: ${POSTGRES_PIDS_LIMIT:-200}
+    networks: [backend]
+
+networks:
+  frontend:
+  backend:
+    internal: true          # app DB reachable only inside the stack — no egress
+
+volumes:
+  metabase-db:
