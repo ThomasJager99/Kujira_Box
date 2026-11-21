@@ -147,6 +147,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Woodpecker CI](infra/woodpecker/) — lightweight, forge-native CI/CD (pairs with Gitea)
 - [Docker Registry + UI](infra/docker-registry/) — private container registry with a web UI
 - [Stalwart Mail](infra/stalwart/) — modern all-in-one mail server (SMTP/IMAP/JMAP)
+- [Infisical](infra/infisical/) — self-hosted secrets management for apps & infrastructure
 
 ### [Observability](observability/)
 - [Glances](observability/glances/) — live system resource monitor
