@@ -64,6 +64,7 @@ lives in the compose file.
 11.[Blocking brute-force: fail2ban & CrowdSec](11-fail2ban-crowdsec/) — watch logs, ban the IPs that keep knocking.
 12.[Rootless Docker](12-rootless-docker/) — run the daemon as a normal user so an escape lands unprivileged, not on host root.
 13.[Podman: rootless & daemonless by default](13-podman/) — the engine that starts where hardened Docker ends up.
+14.[Secrets: beyond the plaintext .env](14-secrets/) — where a plaintext .env leaks, and the ladder up (Docker secrets → SOPS+age → secrets manager).
 
 ## Using these
 
