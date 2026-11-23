@@ -1,0 +1,90 @@
+# Snipe-IT — free, open-source IT asset management. Track hardware, licenses,
+# accessories and consumables: who has which laptop, what's under warranty,
+# license seats, checkouts/checkins, audits. A genuinely useful tool for a
+# homelab or small-IT inventory (and a nice DevOps-portfolio piece).
+#
+# Two services: Snipe-IT + MariaDB. DB is on an internal, no-egress network.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, fill values, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 60s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  snipe-it:
+    <<: *service-defaults
+    image: snipe/snipe-it:${SNIPEIT_VERSION:-v8.8.4}
+    container_name: snipe-it
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Laravel app key — REQUIRED. Generate once and keep it stable:
+      #   echo "base64:$(openssl rand -base64 32)"
+      APP_KEY: ${APP_KEY:?generate with: echo "base64:$(openssl rand -base64 32)"}
+      APP_URL: ${APP_URL:-http://localhost:8095}
+      APP_ENV: production
+      # Database
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE:?}
+      DB_USERNAME: ${MYSQL_USER:?}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?}
+    volumes:
+      - snipeit-data:/var/lib/snipeit     # uploaded files, generated config
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${SNIPEIT_PORT:-8095}:80"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/ || exit 1"]
+    mem_limit: ${SNIPEIT_MEM_LIMIT:-1g}
+    mem_reservation: 256m
+    cpus: ${SNIPEIT_CPUS:-1.0}
+    pids_limit: ${SNIPEIT_PIDS_LIMIT:-300}
+    networks: [frontend, backend]
+
+  db:
+    <<: *service-defaults
+    image: mariadb:${MARIADB_VERSION:-11}
+    container_name: snipe-it-db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+      MARIADB_DATABASE: ${MYSQL_DATABASE:?}
+      MARIADB_USER: ${MYSQL_USER:?}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD:?}
+    volumes:
+      - snipeit-db:/var/lib/mysql
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized || exit 1"]
+    mem_limit: ${MARIADB_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${MARIADB_CPUS:-1.0}
+    pids_limit: ${MARIADB_PIDS_LIMIT:-200}
+    networks: [backend]
+
+networks:
+  frontend:
+  backend:
+    internal: true          # DB reachable only inside the stack — no egress
+
+volumes:
+  snipeit-data:
+  snipeit-db:
