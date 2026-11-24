@@ -1,0 +1,44 @@
+# ── Garage configuration ───────────────────────────────────────────────────
+# Copy to garage.toml, fill in the two secrets below, then: chmod 600 garage.toml
+# This file is mounted read-only at /etc/garage.toml inside the container.
+# Docs: https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
+
+# Where Garage stores its database (metadata) and the object blobs (data).
+# These are the two paths mapped to named volumes in the compose file.
+metadata_dir = "/var/lib/garage/meta"
+data_dir     = "/var/lib/garage/data"
+
+# lmdb = recommended engine (fast, robust). sqlite also works.
+db_engine = "lmdb"
+
+# Single node → one copy of each object. (3 is the production cluster default.)
+replication_factor = 1
+
+# ── Cluster RPC ────────────────────────────────────────────────────────────
+# Even a single node talks to itself over RPC. The secret authenticates nodes
+# to each other — generate a UNIQUE one and keep it private:
+#     openssl rand -hex 32
+rpc_bind_addr   = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret      = "REPLACE_ME__openssl_rand_hex_32"
+
+# ── S3 API (this is the endpoint your tools/backups talk to) ────────────────
+[s3_api]
+s3_region     = "garage"
+api_bind_addr = "[::]:3900"
+# Virtual-host-style addressing needs a wildcard DNS record. For a homelab,
+# use path-style in your client instead (see the README) and this is ignored.
+root_domain   = ".s3.garage.localhost"
+
+# ── Static website hosting (optional — serve a bucket as a website) ─────────
+[s3_web]
+bind_addr   = "[::]:3902"
+root_domain = ".web.garage.localhost"
+index       = "index.html"
+
+# ── Admin API (metrics + health; keep this host-only, never expose to LAN) ──
+[admin]
+api_bind_addr = "[::]:3903"
+# Protects the admin API. Generate another unique secret:
+#     openssl rand -base64 32
+admin_token   = "REPLACE_ME__openssl_rand_base64_32"
