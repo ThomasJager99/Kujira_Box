@@ -1,0 +1,72 @@
+# ── Garage — S3-compatible object storage ──────────────────────────────────
+# A lightweight, self-hosted S3 API: a backend for backups (restic/rclone),
+# CI artifacts, app storage (Nextcloud, Immich…), and Terraform remote state.
+# Headless — there's no web UI; you drive it with the `garage` CLI + any S3
+# client. Single static binary (image is built FROM scratch).
+#
+#   cp garage.toml.example garage.toml   # then fill in the two secrets
+#   cp .env.example .env
+#   docker compose up -d
+#   see README for the one-time layout + bucket + key bootstrap
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  garage:
+    image: dxflrs/garage:${GARAGE_VERSION:?set GARAGE_VERSION in .env}
+    container_name: garage
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+    ports:
+      # S3 API — this is what your backups / S3 clients connect to.
+      #   LISTEN_ADDR=127.0.0.1 → host-only, reach via reverse proxy (hardening 09)
+      #   LISTEN_ADDR=0.0.0.0   → reachable on the LAN (bypasses UFW — hardening 07)
+      - "${LISTEN_ADDR:-0.0.0.0}:${GARAGE_S3_PORT:-3900}:3900"
+      # Admin API (health + Prometheus metrics). ALWAYS host-only — never LAN.
+      - "127.0.0.1:${GARAGE_ADMIN_PORT:-3903}:3903"
+      # Static website hosting (optional — uncomment to serve buckets as sites):
+      # - "${LISTEN_ADDR:-0.0.0.0}:${GARAGE_WEB_PORT:-3902}:3902"
+      # RPC (3901) is NOT published — a single node only talks to itself.
+
+    volumes:
+      # Config (read-only). Holds rpc_secret + admin_token → chmod 600 on host.
+      - ./garage.toml:/etc/garage.toml:ro
+      # Metadata DB (small, critical) and object data (large). Back BOTH up.
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+
+    healthcheck:
+      # The image has no shell (FROM scratch); use the garage binary itself.
+      test: ["CMD", "/garage", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    # ── Resource limits ──────────────────────────────────────────────────────
+    mem_limit: ${GARAGE_MEM_LIMIT:-512m}
+    mem_reservation: ${GARAGE_MEM_RESERVATION:-128m}
+    cpus: ${GARAGE_CPUS:-1.0}
+    pids_limit: ${GARAGE_PIDS_LIMIT:-100}
+
+    # ── Hardening (Level 2 — an unusually GOOD target) ───────────────────────
+    # A FROM-scratch static binary has no shell, no package manager, no OS to
+    # exploit — minimal attack surface. All writes go to the two named volumes,
+    # so a read-only rootfs works cleanly. To enable (test first):
+    #
+    # read_only: true           # rootfs read-only; volumes stay writable
+    # cap_drop: [ALL]           # binds high ports (3900+), needs no capabilities
+    # user: "1000:1000"         # then pre-chown the volumes to 1000:1000 once:
+    #                           #   docker compose run --rm --user root garage \
+    #                           #     ... (or chown the volume paths on the host)
+
+volumes:
+  garage-meta:
+  garage-data:
