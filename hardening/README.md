@@ -83,6 +83,8 @@ lives in the compose file.
 
 16. [Docker Scout: the scanner already on your machine](16-docker-scout/) — a second-opinion CVE scanner built into the Docker CLI, with concrete base-image upgrade advice.
 
+17. [A second opinion with Grype](17-grype/) — run an independent CVE scanner (different database) and see where it disagrees with Scout; the one built for CI gating.
+
 ## Using these
 
 The hardening blocks slot straight into the service stacks in
