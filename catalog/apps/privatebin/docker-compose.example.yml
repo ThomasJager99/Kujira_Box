@@ -1,0 +1,68 @@
+# PrivateBin — a minimalist, open-source, ENCRYPTED pastebin. The server never
+# sees your data in the clear: text is encrypted/decrypted in your browser, and
+# the server only stores the ciphertext (zero-knowledge). Great for sharing a
+# snippet, a log, or a password with an expiry and optional burn-after-reading.
+#
+# Single container (nginx + php-fpm). Default storage is the filesystem, in the
+# /srv/data volume — no database needed.
+#
+# Copy to docker-compose.yml, copy .env.example to .env, then:
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  networks: [frontend]
+
+services:
+  privatebin:
+    <<: *service-defaults
+    image: privatebin/nginx-fpm-alpine:${PRIVATEBIN_VERSION:-2.1.1}
+    container_name: privatebin
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      PHP_TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - privatebin-data:/srv/data          # stored (encrypted) pastes
+      # Optional: drop in your own config to tune expiry, size limits, etc.
+      # - ./conf.php:/srv/cfg/conf.php:ro
+    ports:
+      - "${LISTEN_ADDR:-0.0.0.0}:${PRIVATEBIN_PORT:-8094}:8080"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/ || exit 1"]
+    mem_limit: ${PRIVATEBIN_MEM_LIMIT:-256m}
+    mem_reservation: 64m
+    cpus: ${PRIVATEBIN_CPUS:-0.5}
+    pids_limit: ${PRIVATEBIN_PIDS_LIMIT:-150}
+
+    # --- Hardening (opt-in, Level-2 candidate) -------------------------------
+    # The nginx-fpm-alpine image runs as a non-root user and binds a high port,
+    # so cap_drop fits. Its entrypoint chowns /srv/data at startup, so test
+    # before committing read_only. Uncomment to lock down:
+    # cap_drop:
+    #   - ALL
+    # cap_add:
+    #   - CHOWN
+    #   - SETUID
+    #   - SETGID
+
+networks:
+  frontend:
+
+volumes:
+  privatebin-data:
