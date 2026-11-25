@@ -118,6 +118,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Ghost](apps/ghost/) — modern publishing platform (blog, newsletter, memberships)
 - [Metabase](apps/metabase/) — open-source business intelligence & dashboards over your databases
 - [Snipe-IT](apps/snipe-it/) — free, open-source IT asset management
+- [PrivateBin](apps/privatebin/) — minimalist, zero-knowledge encrypted pastebin
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
