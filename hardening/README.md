@@ -85,6 +85,8 @@ lives in the compose file.
 
 17. [A second opinion with Grype](17-grype/) — run an independent CVE scanner (different database) and see where it disagrees with Scout; the one built for CI gating.
 
+18. [Know what's inside: SBOMs with Syft](18-syft/) — generate a machine-readable ingredient list of an image; the foundation for fast scanning and incident response.
+
 ## Using these
 
 The hardening blocks slot straight into the service stacks in
