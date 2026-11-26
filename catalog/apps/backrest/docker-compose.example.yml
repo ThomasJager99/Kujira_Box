@@ -1,0 +1,74 @@
+# ── Backrest — web UI for restic backups ───────────────────────────────────
+# Schedule, run, browse and restore encrypted restic backups from a browser.
+# Pairs with Garage (yesterday): point a repo at your own S3 and back up there.
+#
+#   cp docker-compose.example.yml docker-compose.yml
+#   cp .env.example .env   &&   edit .env (set BACKUP_SOURCE!)
+#   docker compose up -d   →   open the UI, set a repo password, add a plan
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  backrest:
+    image: ghcr.io/garethgeorge/backrest:${BACKREST_VERSION:?set BACKREST_VERSION in .env}
+    container_name: backrest
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+    environment:
+      BACKREST_DATA: /data
+      BACKREST_CONFIG: /config/config.json
+      XDG_CACHE_HOME: /cache
+      TMPDIR: /tmp
+      TZ: ${TZ:-Europe/Berlin}
+
+    ports:
+      #   LISTEN_ADDR=127.0.0.1 → host-only, reach via reverse proxy (hardening 09)
+      #   LISTEN_ADDR=0.0.0.0   → reachable on the LAN (bypasses UFW — hardening 07)
+      - "${LISTEN_ADDR:-0.0.0.0}:${BACKREST_PORT:-9898}:9898"
+
+    volumes:
+      # Backrest's own state: config (your plans + repo definitions) and data
+      # (the managed restic binary, operation history). Back up the config.
+      - backrest-config:/config
+      - backrest-data:/data
+      - backrest-cache:/cache
+      - backrest-tmp:/tmp
+      # WHAT you want to backed up — mount it READ-ONLY (backup only reads it).
+      # Point BACKUP_SOURCE at the host dir holding your data (volumes, /srv…).
+      - ${BACKUP_SOURCE:?set BACKUP_SOURCE in .env}:/userdata:ro
+
+    healthcheck:
+      # The default image ships wget; the UI answers on 9898.
+      # (The :scratch image variant has no shell/wget — drop this there.)
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9898"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    # ── Resource limits (a running backup can be CPU/RAM hungry) ──────────────
+    mem_limit: ${BACKREST_MEM_LIMIT:-1g}
+    mem_reservation: ${BACKREST_MEM_RESERVATION:-256m}
+    cpus: ${BACKREST_CPUS:-2.0}
+    pids_limit: ${BACKREST_PIDS_LIMIT:-200}
+
+    # ── Hardening (Level 2 — note the caveat) ────────────────────────────────
+    # Backrest runs as root so it can READ every file in your backup source.
+    # Dropping to a non-root user (user:) risks silently skipping files it can't
+    # read — usually NOT what you want for a backup. If your source is readable
+    # by one uid, you can set user: + cap_drop: [ALL]. Otherwise keep root but
+    # the source is mounted :ro above, which limits what a compromise can change.
+    # cap_drop: [ALL]
+
+volumes:
+  backrest-config:
+  backrest-data:
+  backrest-cache:
+  backrest-tmp:
