@@ -119,6 +119,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Metabase](apps/metabase/) — open-source business intelligence & dashboards over your databases
 - [Snipe-IT](apps/snipe-it/) — free, open-source IT asset management
 - [PrivateBin](apps/privatebin/) — minimalist, zero-knowledge encrypted pastebin
+- [Backrest](apps/backrest/) — web UI for restic: scheduled, encrypted, restorable backups (works with Garage/S3)
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
