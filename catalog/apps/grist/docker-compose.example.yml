@@ -1,0 +1,72 @@
+# ── Grist — the spreadsheet-database hybrid ────────────────────────────────
+# Spreadsheets with a real relational engine underneath: typed columns, links
+# between tables, Python formulas, custom views. Single container, SQLite-backed.
+#
+#   cp docker-compose.example.yml docker-compose.yml
+#   cp .env.example .env   &&   edit .env (generate the secrets!)
+#   docker compose up -d
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  grist:
+    image: gristlabs/grist:${GRIST_VERSION:?set GRIST_VERSION in .env}
+    container_name: grist
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+    environment:
+      # Admin account created on a fresh install.
+      GRIST_DEFAULT_EMAIL: ${GRIST_DEFAULT_EMAIL:?set GRIST_DEFAULT_EMAIL in .env}
+      # Secrets — generate with `openssl rand -hex 32` (see .env).
+      GRIST_SESSION_SECRET: ${GRIST_SESSION_SECRET:?set GRIST_SESSION_SECRET in .env}
+      GRIST_BOOT_KEY: ${GRIST_BOOT_KEY:?set GRIST_BOOT_KEY in .env}
+      # Public URL (set when you put it behind a reverse proxy / domain).
+      APP_HOME_URL: ${GRIST_HOME_URL:-http://localhost:8484}
+      # Formula sandbox. gvisor = Grist's default; isolates the Python formula
+      # engine in a userspace kernel (ties to hardening 19). If gvisor misbehaves
+      # under tightened security, switch to `pyodide` (WebAssembly, needs no
+      # extra privileges and runs anywhere).
+      GRIST_SANDBOX_FLAVOR: ${GRIST_SANDBOX_FLAVOR:-gvisor}
+      # Pin everything to one team/org (optional — a-z, 0-9, hyphens).
+      # GRIST_SINGLE_ORG: docs
+
+    ports:
+      #   LISTEN_ADDR=127.0.0.1 → host-only, reach via reverse proxy (hardening 09)
+      #   LISTEN_ADDR=0.0.0.0   → reachable on the LAN (bypasses UFW — hardening 07)
+      - "${LISTEN_ADDR:-0.0.0.0}:${GRIST_PORT:-8484}:8484"
+
+    volumes:
+      # All documents + home DB live here — this is your only backup target.
+      - grist-data:/persist
+
+    healthcheck:
+      # The image is Node-based (no wget/curl guaranteed) — use node itself.
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8484/status',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    # ── Resource limits ──────────────────────────────────────────────────────
+    mem_limit: ${GRIST_MEM_LIMIT:-1g}
+    mem_reservation: ${GRIST_MEM_RESERVATION:-256m}
+    cpus: ${GRIST_CPUS:-1.5}
+    pids_limit: ${GRIST_PIDS_LIMIT:-200}
+
+    # ── Hardening (Level 2 — test) ───────────────────────────────────────────
+    # Grist already sandboxes formula execution internally (GRIST_SANDBOX_FLAVOR
+    # above). For the container itself you can add:
+    # read_only: true            # with tmpfs for /tmp; /persist stays writable
+    # cap_drop: [ALL]            # app binds a high port, needs no capabilities
+    # (test formulas still run — the gvisor flavor needs some syscalls; pyodide
+    #  is the safest flavor under a locked-down container.)
+
+volumes:
+  grist-data:
