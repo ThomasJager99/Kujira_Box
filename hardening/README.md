@@ -87,6 +87,10 @@ lives in the compose file.
 
 18. [Know what's inside: SBOMs with Syft](18-syft/) — generate a machine-readable ingredient list of an image; the foundation for fast scanning and incident response.
 
+19. [Running untrusted code in micro-VMs: Docker Sandboxes](19-docker-sandboxes/) — give risky code its own kernel; the real answer to the docker-socket problem (#08).
+
+
+
 ## Using these
 
 The hardening blocks slot straight into the service stacks in
