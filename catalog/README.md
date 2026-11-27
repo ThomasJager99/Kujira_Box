@@ -120,6 +120,7 @@ otherwise identical: just swap `docker compose` → `docker-compose` in the step
 - [Snipe-IT](apps/snipe-it/) — free, open-source IT asset management
 - [PrivateBin](apps/privatebin/) — minimalist, zero-knowledge encrypted pastebin
 - [Backrest](apps/backrest/) — web UI for restic: scheduled, encrypted, restorable backups (works with Garage/S3)
+- [Grist](apps/grist/) — spreadsheet-database hybrid: typed columns, relations, Python formulas
 
 ### [Media](media/)
 - [Audiobookshelf](media/audiobookshelf/) — audiobook & podcast server
